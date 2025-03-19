@@ -1,0 +1,81 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+	<title>Fountaine MTR Dashboard</title>
+	<script>
+	setInterval(function() {
+		var v = document.getElementById('imgcont');
+		v.innerHTML = "";
+		var ig = document.createElement('img');
+		ig.src = "/state?heartbeat=" + Math.random();
+		v.appendChild(ig);
+	}, 2000);
+	setInterval(function() {
+		var v = document.getElementById('srvt');
+		var xhr = new XMLHttpRequest();
+		xhr.open('GET', '/msg?mode=zeit');
+		xhr.send(null);
+		xhr.onreadystatechange = function() {
+			if (xhr.readyState == 4) v.innerHTML = xhr.responseText;
+		};
+	}, 500);
+	setInterval(function() {
+		var v = document.getElementById('msgs');
+		var xhr = new XMLHttpRequest();
+		xhr.open('GET', '/msg?mode=warung');
+		xhr.send(null);
+		xhr.onreadystatechange = function() {
+			if (xhr.readyState == 4) v.innerHTML = xhr.responseText;
+		};
+	}, 2000);
+	function go() {
+		var xhr = new XMLHttpRequest();
+		var sn = document.getElementById('sname');
+		var st = document.getElementById('stype');
+		var sp = document.getElementById('spwd');
+		if (st.value.length > 1) {
+			xhr.open('GET', "/diverg?sid=" + sn.value + "&stat=" + st.value + "&auth=" + sp.value);
+		} else {
+			xhr.open('GET', "/signalset?sid=" + sn.value + "&stat=" + st.value + "&auth=" + sp.value);
+		}
+		
+		xhr.send(null);
+		xhr.onreadystatechange = function() {
+			if (xhr.readyState == 4) document.getElementById('result').innerHTML = xhr.responseText;
+			if (xhr.responseText == "?") alert("Password might be wrong.");
+		};
+	}
+	function clean() {
+		var xhr = new XMLHttpRequest();
+		xhr.open('GET', '/msg?mode=clr');
+		xhr.send(null);
+	}
+	</script>
+</head>
+<body>
+<strong>Fountaine MTR Control</strong>
+<span style="padding-left: 80px;">Server time: <span id="srvt"></span></span>
+<p id="msgs"></p>
+<br />
+<button onclick="clean();">Clear messages</button>
+<hr />
+<span>Password: </span>
+<input type="password" id="spwd" />
+<span>Signal setting: </span>
+<input type="text" id="sname" />
+<span>&nbsp;to&nbsp;</span>
+<input type="text" id="stype" />
+<button onclick="go();">Load</button>
+<br />
+<span>Result:&nbsp;</span>
+<span style="color: blue; padding-left: 10px;" id="result"></span>
+<hr />
+<a href="/befehlgui" target="_blank">Order Delivery</a>
+<span>&nbsp;|&nbsp;</span>
+<a href="/signaldisp" target="_blank">Alternative signal display</a>
+<hr />
+<div id="imgcont">
+
+</div>
+</body>
+</html>

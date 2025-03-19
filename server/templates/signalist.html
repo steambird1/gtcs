@@ -1,0 +1,33 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+	<title>Fountaine MTR Dashboard</title>
+	<style>
+	table,thead,tbody,th,tr,td {
+		border: 1px solid;
+	}
+	</style>
+</head>
+<body>
+	<table>
+		<thead>
+			<tr>
+				<th>Signal</th>
+				<th>Display</th>
+				<th>Target</th>
+				<th>Current</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% for i in signals %}
+			<tr>
+				<td>{{ i }}</td>
+				<td>{{ prettyhtml(signals[i][2]) | safe }}</td>
+				<td>{{ ",".join(signals[i][3]) }}</td>
+				<td>{{ ("--") if (signals[i][4] >= len(signals[i][3])) else (signals[i][3][signals[i][4]]) }}</td>
+			</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+</body>
+</html>
