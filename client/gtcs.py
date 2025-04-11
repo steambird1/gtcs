@@ -10,6 +10,7 @@ SCTR="http://127.0.0.1:5033/signal"
 ZCTR="http://127.0.0.1:5033/zug"
 DCTR="http://127.0.0.1:5033/zugdist"
 BCTR="http://127.0.0.1:5033/befehl"
+LCTR="http://127.0.0.1:5033/lkjdisp"
 ZUGNAME="zug1"
 
 # GTCS data collector
@@ -24,6 +25,8 @@ thrust=0
 eb=False
 zugat=""
 power=0
+curlkj="?"
+prereded=False
 
 turtle.tracer(False)
 
@@ -38,6 +41,7 @@ spdraw = turtle.Turtle()
 limdraw = turtle.Turtle()
 befehldisp = turtle.Turtle()
 xspdraw = turtle.Turtle()
+lkjdraw = turtle.Turtle()
 t = turtle.Pen()
 spdturtle.penup()
 thrturtle.penup()
@@ -49,12 +53,14 @@ limdraw.penup()
 turtle2.penup()
 befehldisp.penup()
 xspdraw.penup()
+lkjdraw.penup()
 maxspder.goto(-160, 80)
 acreqer.goto(-160, 0)
 spdraw.goto(-160, 80)
 limdraw.goto(-320, 0)
 befehldisp.goto(-160, 220)
 xspdraw.goto(-160,40)
+lkjdraw.goto(-200, 200)
 
 xspdraw.speed('fastest')
 befehldisp.speed('fastest')
@@ -73,6 +79,7 @@ spdturtle.pensize(3)
 thrturtle.pensize(3)
 maxspder.pensize(3)
 acreqer.pensize(3)
+lkjdraw.pensize(2)
 maxspder.pencolor('orange')
 acreqer.pencolor('orange')
 #xspdraw.pencolor('purple')
@@ -90,6 +97,7 @@ spdturtle.hideturtle()
 thrturtle.hideturtle()
 maxspder.hideturtle()
 spdraw.hideturtle()
+lkjdraw.hideturtle()
 
 if LEVEL < 3:
     limdraw.hideturtle()
@@ -236,8 +244,37 @@ def render_gtcs():
     infobar.goto(-160, -120)
     turtle.update()
 
+# 'Yellow-2' requires special operations
+# at (-200, 200) by default, size 20.
+def lkj_draw(col1,col2=""):
+    lkjdraw.clear()
+    lkjdraw.penup()
+    lkjdraw.right(lkjdraw.heading())
+    lkjdraw.goto(-200, 200)
+    if col2 == "":
+        lkjdraw.pendown()
+        lkjdraw.fillcolor(col1)
+        lkjdraw.begin_fill()
+        lkjdraw.circle(20)
+        lkjdraw.end_fill()
+    else:
+        lkjdraw.penup()
+        lkjdraw.goto(-220, 220)
+        lkjdraw.fillcolor(col2)
+        lkjdraw.right(90)
+        lkjdraw.pendown()
+        lkjdraw.begin_fill()
+        lkjdraw.circle(20, 180)
+        lkjdraw.end_fill()
+        lkjdraw.goto(-220, 220)
+        lkjdraw.goto(-180, 220)
+        lkjdraw.fillcolor(col1)
+        lkjdraw.begin_fill()
+        lkjdraw.circle(20, 180)
+        lkjdraw.end_fill()
+
 def render_gtcs_main():
-    global curspeed, acreqspd, spdlim, accreq, gtcsinfo, sysinfo, thrust, eb, nextdist
+    global prereded, curspeed, acreqspd, spdlim, accreq, gtcsinfo, sysinfo, thrust, eb, nextdist
     #print("GTCS Renderer")
     acreqer.hideturtle()
     acreqer.goto(-160, 0)
@@ -306,7 +343,28 @@ def render_gtcs_main():
         infobar.write(i[0])
         infobar.penup()
         infobar.goto(infobar.xcor(), infobar.ycor()-30)
-    
+    if curlkj == "0" or curlkj == "00":
+        if curlkj == "00" or prereded:
+            lkj_draw("red")
+        else:
+            lkj_draw("red", "yellow")
+    elif curlkj == "1":
+        lkj_draw('yellow')
+    elif curlkj in "<>":
+        lkj_draw('yellow', 'yellow')
+    elif curlkj == "2":
+        lkj_draw('green', 'yellow')
+    elif curlkj == "@":
+        lkj_draw('yellow')
+        lkjdraw.penup()
+        lkjdraw.goto(-195,215)
+        lkjdraw.write("2")
+    elif curlkj == "3":
+        lkj_draw('green')
+    else:
+        lkj_draw('white')
+
+    lkjdraw.penup()
     maxspder.right(maxspder.heading())
     spdturtle.right(spdturtle.heading())
     thrturtle.right(thrturtle.heading())
@@ -316,6 +374,7 @@ def render_gtcs_main():
     acreqer.showturtle()
     thrturtle.goto(160, 80)
     infobar.goto(-160, -120)
+    lkjdraw.goto(-200, 200)
     render_bar()
     turtle.update()
     turtle.ontimer(render_gtcs_main, 100)
@@ -399,8 +458,8 @@ def physics():
                 gtcsinfo.append(["GTCS-"+str(LEVEL)+" deflection " + str(int(cacreqspd)) + " km/h","orange"])
             gtcsinfo.append(["Acceleration " + str(round(accreq,2)),"orange"])
             light[2] = True
-        if ((LEVEL >= 2) and curspeed > (cacreqspd + 3)):
-            contnz += 1
+        if ((LEVEL >= 2) and curspeed > (cacreqspd + 3)) and (accreq < -4):
+            contnz += 0.5
         if (LEVEL <= 1) and (contnz > 12):
             light[3] = True
         if (contnz > 50) or (accreq < -8):
@@ -510,7 +569,7 @@ autog3 = True
 ospeed = spdlim
 
 def update_loc(target):
-    global accuer, lastspdlim, g3err, LEVEL, zugat, spdlim, accreq, ZUGNAME, autog3, ospeed, AUTH
+    global prereded, accuer, lastspdlim, g3err, LEVEL, zugat, spdlim, accreq, ZUGNAME, autog3, ospeed, AUTH
     try:
         if zugat != "":
             u = urlopen(ZCTR + "?sid=" + zugat + "&type=1&name=" + ZUGNAME + "&auth=" + AUTH)
@@ -523,6 +582,10 @@ def update_loc(target):
         signal = su.strip()[0]
         g3err.append(time.ctime() + " GTCS-1: Receiving signal " + str(signal))
         cspdlim = translate(signal)
+        if cspdlim == 0:
+            prereded = True
+        else:
+            prereded = False
         if LEVEL <= 1:
             spdlim = cspdlim
             if spdlim > ospeed:
@@ -539,6 +602,10 @@ def update_loc(target):
         if autog3:
             gtcs3_init()
             autog3 = False
+        u = urlopen(LCTR + "?sid=" + zugat)
+        su = u.read().decode('utf-8')
+        u.close()
+        curlkj = su
         u = urlopen(ZCTR + "?sid=" + target + "&type=0&name=" + ZUGNAME + "&auth=" + AUTH)
         u.read()
         u.close()
@@ -622,7 +689,7 @@ def console():
             print("Invalid command")
 
 def gtcs3():
-    global lastspdlim, g3err, accuer, curspeed, caccel, nextdist, spdlim, accreq, acreqspd, zugat, ospeed
+    global LCTR, curlkj, lastspdlim, g3err, accuer, curspeed, caccel, nextdist, spdlim, accreq, acreqspd, zugat, ospeed
     while True:
         if LEVEL >= 3:
             #print("Toggle#")
@@ -658,13 +725,18 @@ def gtcs3():
                             #contnz += 0.25
                     g3err.append(time.ctime() + " GTCS-3: Raw acceleration " + str(round(raw,2)) + ", with vacr = " + str(round(acreqspd,2)))
                     accreq = min(0,raw)
-                    acreqspd = curspeed + (max(0,caccel+0.2) * 3) + accreq * (2 / 3.6)
+                    #acreqspd = curspeed + (max(0,caccel+0.2) * 3) + accreq * (2 / 3.6)
+                    acreqspd = curspeed + accreq * (2 * 3.6)
                     if acreqspd < 0:
                         acreqspd = 0
                     nextdist = sd
                     if zugat != sr[3]:
                         accuer = 1
                         update_loc(sr[3])
+                u = urlopen(LCTR + "?sid=" + zugat)
+                su = u.read().decode('utf-8')
+                u.close()
+                curlkj = su
                 #print("Accumulate",accuer,nextdist)
             except Exception as e:
                 g3err.append(time.ctime() + " GTCS-3:" + str(e))
