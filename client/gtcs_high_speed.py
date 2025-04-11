@@ -621,7 +621,7 @@ GLOGGING = False
 PLOGGING = False
 
 def console():
-    global GLOGGING, PLOGGING, plog, ZUGNAME, spdlim, zugat, gtcsinfo, accreq, acreqspd, thrust, accuer, LEVEL, g3err, autog3
+    global SCTR, ZCTR, DCTR, BCTR, LCTR, GLOGGING, PLOGGING, plog, ZUGNAME, spdlim, zugat, gtcsinfo, accreq, acreqspd, thrust, accuer, LEVEL, g3err, autog3
     while True:
         ip = input(">>> ")
         cmd = ip.split(" ")
@@ -687,6 +687,15 @@ def console():
         elif cmd[0] == "plstat":
             PLOGGING = not PLOGGING
             print("PLog is now",GLOGGING)
+        elif cmd[0] == "ip":
+            if len(cmd) < 2:
+                print("Invalid ip command")
+                continue
+            SCTR="http://{ip}:5033/signal".format(ip=cmd[1])
+            ZCTR="http://{ip}:5033/zug".format(ip=cmd[1])
+            DCTR="http://{ip}:5033/zugdist".format(ip=cmd[1])
+            BCTR="http://{ip}:5033/befehl".format(ip=cmd[1])
+            LCTR="http://{ip}:5033/lkjdisp".format(ip=cmd[1])
         else:
             print("Invalid command")
 

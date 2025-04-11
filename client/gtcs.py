@@ -483,7 +483,7 @@ def physics():
             light[3] = False
         if (accreq >= 0):
             acreqspd = 160
-        elif LEVEL <= 1:
+        else:
             acreqspd = curspeed + accreq * (2 * 3.6)
             if acreqspd < 0:
                 acreqspd = 0
@@ -619,7 +619,7 @@ GLOGGING = False
 PLOGGING = False
 
 def console():
-    global GLOGGING, PLOGGING, plog, ZUGNAME, spdlim, zugat, gtcsinfo, accreq, acreqspd, thrust, accuer, LEVEL, g3err, autog3
+    global SCTR, ZCTR, DCTR, BCTR, LCTR, GLOGGING, PLOGGING, plog, ZUGNAME, spdlim, zugat, gtcsinfo, accreq, acreqspd, thrust, accuer, LEVEL, g3err, autog3
     while True:
         ip = input(">>> ")
         cmd = ip.split(" ")
@@ -685,6 +685,15 @@ def console():
         elif cmd[0] == "plstat":
             PLOGGING = not PLOGGING
             print("PLog is now",GLOGGING)
+        elif cmd[0] == "ip":
+            if len(cmd) < 2:
+                print("Invalid ip command")
+                continue
+            SCTR="http://{ip}:5033/signal".format(ip=cmd[1])
+            ZCTR="http://{ip}:5033/zug".format(ip=cmd[1])
+            DCTR="http://{ip}:5033/zugdist".format(ip=cmd[1])
+            BCTR="http://{ip}:5033/befehl".format(ip=cmd[1])
+            LCTR="http://{ip}:5033/lkjdisp".format(ip=cmd[1])
         else:
             print("Invalid command")
 
@@ -726,7 +735,7 @@ def gtcs3():
                     g3err.append(time.ctime() + " GTCS-3: Raw acceleration " + str(round(raw,2)) + ", with vacr = " + str(round(acreqspd,2)))
                     accreq = min(0,raw)
                     #acreqspd = curspeed + (max(0,caccel+0.2) * 3) + accreq * (2 / 3.6)
-                    acreqspd = curspeed + accreq * (2 * 3.6)
+                    #acreqspd = curspeed + accreq * (2 * 3.6)
                     if acreqspd < 0:
                         acreqspd = 0
                     nextdist = sd
