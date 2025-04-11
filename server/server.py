@@ -13,7 +13,7 @@ GREEN = "."
 WARNING = "/"
 ERROR = "?"
 
-ZOOM = 10
+ZOOM = 250
 
 # KLine graph
 signals = {}
@@ -29,6 +29,8 @@ TRAIN_AUTH = [getmd5("jeangunnhildr"), getmd5("_~_amber~_~")]
 CTRL_AUTH = [getmd5("no_klee_here_!")]
 BEFEHL_AUTH = [getmd5("barbatos'_wish^)")]
 
+RECM_FREE = False
+
 def check_auth(cur,dtype):
     if AUTH_FREE:
         return True
@@ -42,12 +44,16 @@ def draw_line(name,fromx,fromy,tox,toy,margin):
     global sids, signals
     if name not in sids:
         sids[name] = 0
-    mx = margin if (fromx < tox) else (-margin)
-    my = margin if (fromy < toy) else (-margin)
+    mx = margin# if (fromx < tox) else (-margin)
+    my = margin# if (fromy < toy) else (-margin)
     #for x in range(fromx,tox,mx):
     #    for y in range(fromy,toy,my):
     x = fromx
     y = fromy
+    if (abs(toy-tox)%margin) > 0 or (abs(fromy-fromx)%margin) > 0:
+        raise ValueError("May cause dead loop")
+    #if (abs(toy-tox)//margin) != (abs(fromy-fromx)//margin):
+    #    raise ValueError("Bad steps")
     while x != tox or y != toy:
         if name+str(sids[name]) in signals:
             signals[name+str(sids[name])][3].insert(0,name+str(sids[name]+1))
@@ -60,6 +66,25 @@ def draw_line(name,fromx,fromy,tox,toy,margin):
             x += mx
         if y != toy:
             y += my
+        print(x,y)
+
+def getlatest(name):
+    global sids
+    return name+str(sids[name])
+
+def addstation(name,station,sxd,syd,mxd,myd,dn=""):
+    global sids, signals
+    cstat = signals[getlatest(name)]
+    ent = name + "_" + station + "_ent"
+    ext = name + "_" + station + "_ext"
+    signals[getlatest(name)][3].insert(0,ent)
+    signals[ent] = [cstat[0],[cstat[0][0]+sxd,cstat[0][1]+syd],GREEN,[ext],0]
+    sids[name] += 1
+    if dn != "":
+        signals[ent][3].append(dn + "_" + station + "_ext")
+    signals[ext] = [[cstat[0][0]+mxd,cstat[0][1]+myd],[cstat[0][0]+sxd+mxd,cstat[0][1]+syd+myd],RED,[ent,name+str(sids[name])],1]
+    signals[name+str(sids[name])] = [[cstat[0][0]+sxd+mxd,cstat[0][1]+syd+myd],[cstat[0][0]+(sxd*2)+mxd,cstat[0][1]+(syd*2)+myd],RED,[ext],0]
+"""
 draw_line("C",-80,120,-30,60,10)
 draw_line("C",-30,60,-30,-60,10)
 draw_line("C",-30,-60,-40,-70,10)
@@ -69,6 +94,48 @@ draw_line("C",-100,-100,-160,-160,10)
 draw_line("R",-80,120,-30,160,10)
 draw_line("R",-30,160,100,160,10)
 signals["C1"][3].append("R1")
+"""
+
+#_aincr = 0
+#def report_line():
+#    _aincr += 1
+#    print("Drawing",_aincr,"...")
+
+draw_line("M_up",0,-205,0,-200,5)
+addstation("M_up","lyg",0,2,0,3,"M_dn")
+#report_line()
+draw_line("M_up",0,-200,0,-140,5)
+addstation("M_up","gly",0,2,0,3,"M_dn")
+#report_line()
+draw_line("M_up",0,-130,0,-90,5)
+addstation("M_up","ws",0,2,0,3,"M_dn")
+draw_line("M_up",0,-80,0,-30,5)
+addstation("M_up","dhz",0,2,0,3,"M_dn")
+draw_line("M_up",0,-20,0,20,5)
+addstation("M_up","sm_stonetur",0,2,0,3,"M_dn")
+draw_line("M_up",0,30,50,80,5)
+addstation("M_up","Morganstadt",2,2,3,3,"M_dn")
+draw_line("M_up",60,90,120,150,5)
+addstation("M_up","Quessw",2,2,3,3,"M_dn")
+draw_line("M_up",130,160,130,220,5)
+addstation("M_up","Mondstadt",0,2,0,3,"M_dn")
+
+draw_line("M_dn",120,225,120,220,-5)
+addstation("M_dn","Mondstadt",0,-2,0,-3,"M_up")
+draw_line("M_dn",120,220,120,160,-5)
+addstation("M_dn","Quessw",-2,-2,-3,-3,"M_up")
+draw_line("M_dn",110,150,50,90,-5)
+addstation("M_dn","Morganstadt",-2,-2,-3,-3,"M_up")
+draw_line("M_dn",40,80,-10,30,-5)
+addstation("M_dn","sm_stonetur",0,-2,0,-3,"M_up")
+draw_line("M_dn",-10,20,-10,-20,-5)
+addstation("M_dn","dhz",0,-2,0,-3,"M_up")
+draw_line("M_dn",-10,-30,-10,-80,-5)
+addstation("M_dn","ws",0,-2,0,-3,"M_up")
+draw_line("M_dn",0,-90,0,-130,-5)
+addstation("M_dn","gly",0,-2,0,-3,"M_up")
+draw_line("M_dn",0,-140,0,-200,-5)
+addstation("M_dn","lyg",0,-2,0,-3,"M_up")
 
 #signals = {"z0":[[-220,0],[180,0],GREEN,["z1"],0],"z1":[[-180,0],[80,0],GREEN,["z2","z3"],0],"z2":[[80,0],[180,0],GREEN,[],0],"z3":[[80,-60],[180,-80],GREEN,[],0]}
 visit = []
@@ -94,19 +161,21 @@ def update_signal(name,ovrd=None):
         turtle.pencolor('orange')
     #turtle.write(name)
     extra = ""
+    writing = (signals[name][2] != GREEN) or (zugin[name] != "")
     if signals[name][4] < len(signals[name][3]):
         extra = " -> " + signals[name][3][signals[name][4]]
     if zugin[name] != "":
         extra += " & " + zugin[name]
-    if signals[name][2] not in [RED, GREEN]:
-        turtle.write(name + ": " + signals[name][2] + extra, False, "center", ("Arial", 10, "normal"))
-    else:
-        turtle.write(name + extra, False, "center", ("Arial", 10, "normal"))     
+    if writing:
+        if signals[name][2] not in [RED, GREEN]:
+            turtle.write(name + ": " + signals[name][2] + extra, False, "center", ("Arial", 10, "normal"))
+        else:
+            turtle.write(name + extra, False, "center", ("Arial", 10, "normal"))     
     turtle.goto(signals[name][1][0],signals[name][1][1])
     turtle.penup()
 
 def scan_signal(source,blue=False):
-    global signals, visit
+    global signals, visit, RECM_FREE
     if source in visit:
         return
     visit.append(source)
@@ -114,7 +183,8 @@ def scan_signal(source,blue=False):
     name = source
     if signals[name][4] < len(signals[name][3]):
         prev[signals[name][3][signals[name][4]]] = source
-        scan_signal(signals[name][3][signals[name][4]],blue)
+        nxts = signals[name][3][signals[name][4]]
+        scan_signal(nxts,blue)
     for i in range(len(signals[name][3])):
         if i != signals[name][4]:
             #prev[signals[name][3][i]] = source
@@ -172,21 +242,21 @@ def zugscan(source,comparer=300):
     global zscanned
     #print("scan",source)
     if source in zscanned:
-        return (0, "-", source)
+        return (0, "-", source, 0)
     zscanned.append(source)
     #if signals[source][2] != GREEN:
     #    return (0, signals[source][2], source)
     tl = translate(signals[source][2])
     if (tl < 120) and (tl != comparer):
-        return (0, signals[source][2], source)
+        return (0, signals[source][2], source, 0)
     if len(signals[source][3]) <= 0:
-        return (length(source), "-", source)
+        return (length(source), "-", source, 0)
     try:
         zs = zugscan(signals[source][3][signals[source][4]], comparer)
-        return (zs[0] + length(source), zs[1], zs[2])
+        return (zs[0] + length(source), zs[1], zs[2], zs[3] + 1)
     except Exception as e:
         print(str(e))
-        return (0, "-", source)
+        return (0, "-", source, 0)
 
 def newname(source, dist):
     if length(source) >= dist:
@@ -195,6 +265,55 @@ def newname(source, dist):
         if len(signals[source][3]) <= 0:
             return "?"
         return newname(signals[source][3][signals[source][4]], dist - length(source))
+
+# Return LKJ style signal information
+# 0 - Red/Yellow
+# 00 - Red (Already entering)
+# 1 - Yellow
+# < or > - Yellow/Yellow
+# 2 - Green/Yellow
+# @ - Yellow 2
+# 3 - Green
+# Otherwise - White
+@app.route("/lkjdisp")
+def lkjdisp():
+    global signals, zscanned
+    curpos = request.args.get("sid")
+    if curpos not in signals:
+        return "?"
+    if len(signals[curpos][3]) <= signals[curpos][4]:
+        return "0"
+    else:
+        curpos = signals[curpos][3][signals[curpos][4]]
+    zscanned = []
+    zs = zugscan(curpos)
+    print(zs)
+    if zs[3] == 0:
+        if zs[1] in "123456789":
+            return "1"
+        elif zs[1] in "<>":
+            return zs[1]
+        elif zs[1] in "|.":
+            return "3"
+        else:
+            return "0"
+    # 0 - Red/corr, 1 - Yellow, 2 - Green-yellow, 3 - Green
+    zlevel = 0
+    dstate = False
+    if zs[1] == "|":
+        zlevel = 2
+    elif zs[1] == ".":
+        zlevel = 3
+    elif zs[1] == "<" or zs[1] == ">":
+        zlevel = 0
+        dstate = True
+    elif zs[1] in "123456789":
+        zlevel = 1
+    zlevel = min(3, zlevel + zs[3])
+    if (zlevel == 1) and dstate:
+        return "@"
+    else:
+        return str(zlevel)
 
 # Return distance (meter)
 @app.route("/zugdist")
@@ -425,7 +544,7 @@ def imgupd():
         screen = turtle.getcanvas()
         screen.postscript(file="turtle.eps",colormode='color')
         s = Image.open("turtle.eps")
-        #s = s.resize((s.size[0], s.size[1]))
+        s = s.resize((s.size[0], s.size[1]))
         s.save("turtle.png", "png")
         curerr = ""
     except Exception as e:
