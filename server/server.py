@@ -206,7 +206,16 @@ def signalist():
     global signals
     result = ""
     for i in signals:
-        result += i + " " + str(length(i)) + "\n"
+        result += i + " " + str(length(i)*ZOOM) + "\n"
+    return result
+
+@app.route("/signalstates")
+def signalstates():
+    global signals
+    result = ""
+    for i in signals:
+        si = signals[i]
+        result += i + " " + str(si[0][0]) + " " + str(si[0][1]) + " " + str(si[1][0]) + " " + str(si[1][1]) + " " + si[2] + " " + ",".join(si[3]) + " " + str(si[4]) + "\n"
     return result
 
 def prettyhtml(s):
