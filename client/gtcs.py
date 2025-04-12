@@ -42,6 +42,7 @@ limdraw = turtle.Turtle()
 befehldisp = turtle.Turtle()
 xspdraw = turtle.Turtle()
 lkjdraw = turtle.Turtle()
+spdhint = turtle.Turtle()
 t = turtle.Pen()
 spdturtle.penup()
 thrturtle.penup()
@@ -54,8 +55,10 @@ turtle2.penup()
 befehldisp.penup()
 xspdraw.penup()
 lkjdraw.penup()
+spdhint.penup()
 maxspder.goto(-160, 80)
 acreqer.goto(-160, 0)
+spdhint.goto(-155, 5)
 spdraw.goto(-160, 80)
 limdraw.goto(-320, 0)
 befehldisp.goto(-160, 220)
@@ -71,6 +74,8 @@ acreqer.speed('fastest')
 spdraw.speed('fastest')
 turtle2.speed('fastest')
 turtle3.speed('fastest')
+lkjdraw.speed('fastest')
+spdhint.speed('fastest')
 befehldisp.pensize(2)
 turtle2.pensize(2)
 turtle3.pensize(2)
@@ -80,8 +85,10 @@ thrturtle.pensize(3)
 maxspder.pensize(3)
 acreqer.pensize(3)
 lkjdraw.pensize(2)
+spdhint.pensize(3)
 maxspder.pencolor('orange')
 acreqer.pencolor('orange')
+spdhint.pencolor('blue')
 #xspdraw.pencolor('purple')
 
 infobar.speed('fastest')
@@ -274,11 +281,15 @@ def lkj_draw(col1,col2=""):
         lkjdraw.end_fill()
 
 def render_gtcs_main():
-    global prereded, curspeed, acreqspd, spdlim, accreq, gtcsinfo, sysinfo, thrust, eb, nextdist
+    global light, caccel, prereded, curspeed, acreqspd, spdlim, accreq, gtcsinfo, sysinfo, thrust, eb, nextdist
     #print("GTCS Renderer")
     acreqer.hideturtle()
     acreqer.goto(-160, 0)
-    if eb:
+    spdhint.clear()
+    spdhint.penup()
+    # 5 radius differ
+    spdhint.goto(-160, 0)
+    if light[3]:
         maxspder.pencolor('red')
         acreqer.pencolor('red')
     else:
@@ -313,6 +324,15 @@ def render_gtcs_main():
         acreqer.circle(80, (acreqspd-curspeed)*(-2))
     acreqer.left(90)
     acreqer.penup()
+    spdhint.right(spdhint.heading())
+    spdhint.circle(80, 60 + (120-curspeed)*2)
+    spdhint.pendown()
+    cspdexp = curspeed + (caccel*2*3.6)
+    # debug
+    #print(cspdexp)
+    spdhint.circle(80, (cspdexp-curspeed)*(-2))
+    spdhint.left(90)
+    spdhint.penup()
     thrturtle.pendown()
     thrturtle.right(thrust)
     thrturtle.forward(75)
@@ -384,23 +404,24 @@ def kup():
     #print("Keyup")
     if power > 120:
         return
-    power += 10
+    power = (power//10)*10+10
 
 def kdn():
     global power, thrust
     #print("Keydn")
     if power < -70:
         return
-    power -= 10
+    power = (power//10)*10-10
 
 def ksupp():
-    global accreq, spdlim
+    global accreq, spdlim, lastspdlim
     if not light[9]:
         gtcs3_exit()
         accreq = 0
         spdlim = 40
         light[2] = False
         light[3] = False
+        lastspdlim = 120
     light[9] = not light[9]
 
 acreqspd = 160
@@ -439,6 +460,8 @@ def physics():
     light[4] = (abs(power) > 0)
     light[5] = (abs(power) > 30)
     light[6] = (power < -40)
+    if light[6]:
+        sysinfo = [["Magnet-brake", "blue"]]
     
     gtcsinfo = []
     if light[9]:
@@ -546,10 +569,10 @@ t.screen.onkey(befclr, '8')
 # Also for confirmation.
 t.screen.onkey(befshow2, '7')
 
-t.screen.onkey(test1, 'a')
-t.screen.onkey(test2, 's')
-t.screen.onkey(test3, 'd')
-t.screen.onkey(test4, 'f')
+#t.screen.onkey(test1, 'a')
+#t.screen.onkey(test2, 's')
+#t.screen.onkey(test3, 'd')
+#t.screen.onkey(test4, 'f')
 
 t.screen.listen()
 
