@@ -3,12 +3,70 @@
 <head>
 	<title>Fountaine MTR Dashboard</title>
 	<script>
+	
+	// Move before resize !!
+	var MAP_MOVE_X = 220, MAP_MOVE_Y = 250, MAP_RESIZE_X = 1, MAP_RESIZE_Y = 1;
+	
+	function xmv(x) {
+		return (x+MAP_MOVE_X)*MAP_RESIZE_X;
+	}
+	
+	function ymv(y) {
+		return (y+MAP_MOVE_Y)*MAP_RESIZE_Y;
+	}
+	
+	function sigcolor(sigstr) {
+		switch (sigstr) {
+			case '.':
+				return 'green';
+				break;
+			case '1': case '2': case '3': case '4': case '5':
+			case '6': case '7': case '8': case '9': case '/': case '|':
+				return 'orange';
+				break;
+			default:
+				return 'red';
+				break;
+		}
+	}
+	
 	setInterval(function() {
+	// Not supported for server with high stress.
+	/*
 		var v = document.getElementById('imgcont');
 		v.innerHTML = "";
 		var ig = document.createElement('img');
 		ig.src = "/state?heartbeat=" + Math.random();
 		v.appendChild(ig);
+	*/
+		var cd = document.getElementById('cvcont');
+		var cv = cd.getContext('2d');
+		cv.lineWidth = 4;
+		cv.clearRect(0, 0, cd.width, cd.height);
+		var xhr = new XMLHttpRequest();
+		xhr.open('GET', '/signalstates');
+		xhr.send(null);
+		xhr.onreadystatechange = function() {
+			if (xhr.readyState == 4) {
+				var xrt = xhr.responseText.split("\n");
+				for (let i = 0; i < xrt.length; i++) {
+					let crt = xrt[i].split(" ");
+					let xb = xmv(parseInt(crt[1])), yb = ymv(parseInt(crt[2]));
+					let xe = xmv(parseInt(crt[3])), ye = ymv(parseInt(crt[4]));
+					cv.beginPath();
+					cv.moveTo(xb, yb);
+					cv.lineTo(xe, ye);
+					let csc = sigcolor(crt[5]);
+					cv.strokeStyle = csc;
+					cv.fillStyle = csc;
+					if (csc != 'green') {
+						cv.fillText(crt[0] + ": " + crt[5], (xb+xe)/2, (yb+ye)/2);
+					}
+					cv.stroke();
+				}
+			}
+		};
+		
 	}, 2000);
 	setInterval(function() {
 		var v = document.getElementById('srvt');
@@ -74,8 +132,13 @@
 <span>&nbsp;|&nbsp;</span>
 <a href="/signaldisp" target="_blank">Alternative signal display</a>
 <hr />
+<!--
 <div id="imgcont">
 
 </div>
+-->
+<canvas id="cvcont" width="800" height="600">
+
+</canvas>
 </body>
 </html>
