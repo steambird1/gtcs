@@ -41,7 +41,7 @@ def td_search(tag, no, count):
         # debug...
         print("Unexpected",s,"toggled error!")
         # Ask for complete update
-        return dict()
+        raise e
 
 def td_fetchall(tag):
     res = dict()
@@ -88,34 +88,37 @@ def report_signal_mod(key):
 def sig_update():
     global SDATA_PRE, signals, sig_last_mod
     print("Prepare for signal update cycle")
-    fetched = td_fetchall(SDATA_PRE)
-    # For the ones not originally in [signals], they have nothing to do with us
-    print("Start signal update cycle")
-    for i in signals:
-        hauptext = SDATA_PRE + i + "_haupt"
-        zeitext = SDATA_PRE + i + "_zeit"
-        uploading = (hauptext not in fetched) or (zeitext not in fetched)
-        downloading = False
-        uploadtext = json.dumps(signals[i])
-        if not uploading:
-            originaltext = json.dumps(fetched[hauptext])
-            if uploadtext == originaltext:
-                continue
-            server_ts = float(fetched[zeitext].strip())
-            if (i not in sig_last_mod) or (sig_last_mod[i] < server_ts):
-                downloading = True
-                uploading = False
-            elif sig_last_mod[i] > server_ts:
-                downloading = False
-                uploading = True
-        if uploading:
-            td_update(hauptext, urllib.parse.quote(uploadtext,"")) 
-            td_update(zeitext, str(time.time()))
-            print("Signal updated:",i)
-        elif downloading:
-            signals[i] = fetched[hauptext]
-            report_signal_mod(i)
-            print("Signal downloaded:",i)
+    try:
+        fetched = td_fetchall(SDATA_PRE)
+        # For the ones not originally in [signals], they have nothing to do with us
+        print("Start signal update cycle")
+        for i in signals:
+            hauptext = SDATA_PRE + i + "_haupt"
+            zeitext = SDATA_PRE + i + "_zeit"
+            uploading = (hauptext not in fetched) or (zeitext not in fetched)
+            downloading = False
+            uploadtext = json.dumps(signals[i])
+            if not uploading:
+                originaltext = json.dumps(fetched[hauptext])
+                if uploadtext == originaltext:
+                    continue
+                server_ts = float(fetched[zeitext].strip())
+                if (i not in sig_last_mod) or (sig_last_mod[i] < server_ts):
+                    downloading = True
+                    uploading = False
+                elif sig_last_mod[i] > server_ts:
+                    downloading = False
+                    uploading = True
+            if uploading:
+                td_update(hauptext, urllib.parse.quote(uploadtext,"")) 
+                td_update(zeitext, str(time.time()))
+                print("Signal updated:",i)
+            elif downloading:
+                signals[i] = fetched[hauptext]
+                report_signal_mod(i)
+                print("Signal downloaded:",i)
+    except Exception as e:
+        print("Signal cycle failed:",e)
 
 def getmd5(s):
     return hashlib.md5(s.encode('utf-8')).hexdigest()
@@ -503,6 +506,7 @@ def zug():
         if sname in prev:
             originals[prev[sname]] = signals[prev[sname]][2]
             signals[prev[sname]][2] = WARNING
+            report_signal_mod(prev[sname])
         return RED
     elif state == "1":
         if zugin[sname] != zugid:
@@ -513,6 +517,7 @@ def zug():
         if sname in prev:
             if prev[sname] in originals:
                 signals[prev[sname]][2] = originals[prev[sname]]
+                report_signal_mod(prev[sname])
         report_signal_mod(sname)
         zugin[sname] = ""
         return signals[sname][2]
@@ -646,7 +651,8 @@ def sigthread():
     global t_lasttog
     print("Connecting to database...")
     while True:
-        if t_lasttog < time.time() - 1:
+        # To ease stress for public database
+        if t_lasttog < time.time() - 5:
             t_lasttog = time.time()
             sig_update()
         time.sleep(0.1)
