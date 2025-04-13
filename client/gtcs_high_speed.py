@@ -280,7 +280,7 @@ def lkj_draw(col1,col2=""):
         lkjdraw.end_fill()
 
 def render_gtcs_main():
-    global light, caccel, prereded, curspeed, acreqspd, spdlim, accreq, gtcsinfo, sysinfo, thrust, eb, nextdist, curlkj
+    global light, caccel, prereded, curspeed, acreqspd, spdlim, lastspdlim, accreq, gtcsinfo, sysinfo, thrust, eb, nextdist, curlkj
     #print("GTCS Renderer")
     acreqer.hideturtle()
     acreqer.goto(-160, 0)
@@ -320,13 +320,20 @@ def render_gtcs_main():
     #acreqer.right(accreq/4)
     acreqer.pendown()
     if (acreqspd) < curspeed:
-        acreqer.circle(80, (acreqspd-curspeed)*(-1))
+        wacreqspd = curspeed + accreq * (10 * 3.6)
+        if wacreqspd < min(spdlim, lastspdlim):
+            wacreqspd = min(spdlim, lastspdlim)
+        acreqer.circle(80, (wacreqspd-curspeed)*(-1))
     acreqer.left(90)
     acreqer.penup()
     spdhint.right(spdhint.heading())
     spdhint.circle(80, 60 + (240-curspeed))
     spdhint.pendown()
-    cspdexp = curspeed + (caccel*2*3.6)
+    cspdexp = curspeed + (caccel*100)
+    if cspdexp > 240:
+        cspdexp = 240
+    elif cspdexp < 0:
+        cspdexp = 0
     # debug
     #print(cspdexp)
     spdhint.circle(80, (cspdexp-curspeed)*(-1))
@@ -478,7 +485,7 @@ def physics():
                 gtcsinfo.append(["GTCS-"+str(LEVEL)+" deflection " + str(int(cacreqspd)) + " km/h","orange"])
             gtcsinfo.append(["Acceleration " + str(round(accreq,2)),"orange"])
             light[2] = True
-        if ((LEVEL >= 2) and curspeed > (cacreqspd + 3)) and (accreq < -4):
+        if ((LEVEL >= 2) and curspeed > (cacreqspd + 3)) and (accreq < -2):
             contnz += 0.5
         if (LEVEL <= 1) and (contnz > 12):
             light[3] = True
@@ -518,6 +525,9 @@ def physics():
                 else:
                     power -= 10
             gtcsinfo.append(["Zwangsbremsung", "red"])
+    if light[6]:
+        gtcsinfo.append(["Magnet-brake", "blue"])
+    
     turtle.ontimer(physics, 200)
 
 ### TODO: Use requests library.
@@ -742,7 +752,18 @@ def gtcs3():
                     elif spdlim < ospeed:
                         light[1] = False
                     ospeed = spdlim
-                    raw = (spdlim**2 - (curspeed + max(0,caccel+0.2) * 3)**2)/(2*sd)
+                    raw = 0
+                    if sd > 200:
+                        if curspeed > spdlim:
+                            raw = (((spdlim/3.6)**2 - ((curspeed + max(0,caccel+0.2) * 3)/3.6)**2)/(2*(sd-200)))
+                            if sd < 500:
+                                raw -= 0.5
+                            elif sd < 1200:
+                                raw -= 0.25
+                            elif sd < 2000:
+                                raw -= 0.15
+                    else:
+                        raw = -4
                     #if sd > 3500:
                     #    raw = 0
                     if (curspeed > lastspdlim):
