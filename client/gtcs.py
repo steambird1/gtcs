@@ -321,7 +321,7 @@ def render_gtcs_main():
     #acreqer.right(accreq/4)
     acreqer.pendown()
     if (acreqspd) < curspeed:
-        wacreqspd = curspeed + accreq * (10 * 3.6)
+        wacreqspd = curspeed + accreq * (20 * 3.6)
         if wacreqspd < min(spdlim, lastspdlim):
             wacreqspd = min(spdlim, lastspdlim)
         acreqer.circle(80, (wacreqspd-curspeed)*(-2))
