@@ -95,28 +95,42 @@ def sig_update():
         for i in signals:
             hauptext = SDATA_PRE + i + "_haupt"
             zeitext = SDATA_PRE + i + "_zeit"
-            uploading = (hauptext not in fetched) or (zeitext not in fetched)
-            downloading = False
-            uploadtext = json.dumps(signals[i])
-            if not uploading:
-                originaltext = json.dumps(fetched[hauptext])
-                if uploadtext == originaltext:
-                    continue
-                server_ts = float(fetched[zeitext].strip())
-                if (i not in sig_last_mod) or (sig_last_mod[i] < server_ts):
-                    downloading = True
-                    uploading = False
-                elif sig_last_mod[i] > server_ts:
-                    downloading = False
+            try:
+                uploading = (hauptext not in fetched) or (zeitext not in fetched)
+                downloading = False
+                uploadtext = json.dumps(signals[i])
+                # Fatui HAS BEEN DAMAGING DATABASE. Fix any corruption detected.
+                if type(fetched[hauptext]) is not list:
                     uploading = True
-            if uploading:
+                    print("[Err 1] Data corruption for",i)
+                elif len(fetched[hauptext]) < 4:
+                    uploading = True
+                    print("[Err 2] Data corruption for",i)
+                if not uploading:
+                    originaltext = json.dumps(fetched[hauptext])
+                    if uploadtext == originaltext:
+                        continue
+                    server_ts = float(fetched[zeitext].strip())
+                    if (i not in sig_last_mod) or (sig_last_mod[i] < server_ts):
+                        downloading = True
+                        uploading = False
+                    elif sig_last_mod[i] > server_ts:
+                        downloading = False
+                        uploading = True
+                if uploading:
+                    td_update(hauptext, urllib.parse.quote(uploadtext,"")) 
+                    td_update(zeitext, str(time.time()))
+                    print("Signal updated:",i)
+                elif downloading:
+                    signals[i] = fetched[hauptext]
+                    report_signal_mod(i)
+                    print("Signal downloaded:",i)
+            except Exception as e:
+                print("Single signal process failed",e,"; now forced to upload",i,"to override")
                 td_update(hauptext, urllib.parse.quote(uploadtext,"")) 
-                td_update(zeitext, str(time.time()))
-                print("Signal updated:",i)
-            elif downloading:
-                signals[i] = fetched[hauptext]
-                report_signal_mod(i)
-                print("Signal downloaded:",i)
+                st = time.time()
+                sig_last_mod[i] = st
+                td_update(zeitext, str(st))
     except Exception as e:
         print("Signal cycle failed:",e)
 
@@ -201,6 +215,13 @@ signals["C1"][3].append("R1")
 #    print("Drawing",_aincr,"...")
 
 draw_line("M_up",0,-205,0,-200,5)
+
+# Thus adding auxiliary track for liyuegang
+signals["M_upt_lyg"] = [[0, -200], [-5, -195], RED, ["M_up3", "M_dnt_lyg"], 0]
+signals["M_dnt_lyg"] = [[-10, -190], [-5, -195], RED, ["M_dn80", "M_lyg_gleis3_ent", "M_upt_lyg"], 0]
+signals["M_lyg_gleis3_ent"] = [[-5, -195], [-5, -200], GREEN, ["M_lyg_gleis3_ext", "M_dnt_lyg"], 0]
+signals["M_lyg_gleis3_ext"] = [[-5, -200], [-5, -205], RED, ["M_lyg_gleis3_ent"], 0]
+
 addstation("M_up","lyg",0,2,0,3,"M_dn")
 #report_line()
 draw_line("M_up",0,-200,0,-140,5)
@@ -231,10 +252,13 @@ draw_line("M_dn",-10,20,-10,-20,-5)
 addstation("M_dn","dhz",0,-2,0,-3,"M_up")
 draw_line("M_dn",-10,-30,-10,-80,-5)
 addstation("M_dn","ws",0,-2,0,-3,"M_up")
-draw_line("M_dn",0,-90,0,-130,-5)
+draw_line("M_dn",-10,-90,-10,-130,-5)
 addstation("M_dn","gly",0,-2,0,-3,"M_up")
-draw_line("M_dn",0,-140,0,-200,-5)
+draw_line("M_dn",-10,-140,-10,-200,-5)
 addstation("M_dn","lyg",0,-2,0,-3,"M_up")
+
+signals["M_up2"][3].append("M_upt_lyg")
+signals["M_dn79"][3].append("M_dnt_lyg")
 
 #signals = {"z0":[[-220,0],[180,0],GREEN,["z1"],0],"z1":[[-180,0],[80,0],GREEN,["z2","z3"],0],"z2":[[80,0],[180,0],GREEN,[],0],"z3":[[80,-60],[180,-80],GREEN,[],0]}
 visit = []
@@ -319,9 +343,11 @@ def signalstates():
 
 def prettyhtml(s):
     c = "red"
-    if s == ".":
+    if s == "0":
+        c = "red"
+    elif s == ".":
         c = "green"
-    elif s in "|/123456789<>":
+    elif (s.isdigit()) or (s in "|/<>"):
         c = "orange"
     return '<span style="color:{};font-weight:700;">{}</span>'.format(c,s)
 
@@ -340,8 +366,8 @@ def translate(signal):
         cspdlim = 120
     elif signal == "/" or signal == "<" or signal == ">":
         cspdlim = 60
-    elif ord(signal) >= 48 and ord(signal) < 58:
-        cspdlim = (ord(signal)-48)*10
+    elif signal.isdigit():
+        cspdlim = (int(signal))*10
     else:
         cspdlim = 0
     return cspdlim
@@ -355,7 +381,7 @@ def zugscan(source,comparer=300):
     #if signals[source][2] != GREEN:
     #    return (0, signals[source][2], source)
     tl = translate(signals[source][2])
-    if (tl < 120) and (tl != comparer):
+    if (tl < 240) and (tl != comparer):
         return (0, signals[source][2], source, 0)
     if len(signals[source][3]) <= 0:
         return (length(source), "-", source, 0)
@@ -375,6 +401,8 @@ def newname(source, dist):
         return newname(signals[source][3][signals[source][4]], dist - length(source))
 
 # Return LKJ style signal information
+# (LKJ actually only works for 120 km/h environment in the past,
+# but with this LKJ/CTCS update, green 2-5 will be available)
 # 0 - Red/Yellow
 # 00 - Red (Already entering)
 # 1 - Yellow
@@ -397,8 +425,13 @@ def lkjdisp():
     zs = zugscan(curpos)
     print(zs)
     if zs[3] == 0:
-        if zs[1] in "123456789":
+        if zs[1] in "/":
             return "1"
+        elif zs[1].isdigit():
+            if int(zs[1]) < 10:
+                return "1"
+            else:
+                return "2"
         elif zs[1] in "<>":
             return zs[1]
         elif zs[1] in "|.":
@@ -406,18 +439,25 @@ def lkjdisp():
         else:
             return "0"
     # 0 - Red/corr, 1 - Yellow, 2 - Green-yellow, 3 - Green
+    # This is an announcement towards
     zlevel = 0
     dstate = False
-    if zs[1] == "|":
+    if zs[1] == "/":
+        zlevel = 1
+    elif zs[1] == "|":
+        # Currently an equivalent to no warning
         zlevel = 2
     elif zs[1] == ".":
         zlevel = 3
     elif zs[1] == "<" or zs[1] == ">":
         zlevel = 0
         dstate = True
-    elif zs[1] in "123456789":
-        zlevel = 1
-    zlevel = min(3, zlevel + zs[3])
+    elif zs[1].isdigit():
+        if int(zs[1]) < 10:
+            zlevel = 1
+        else:
+            zlevel = 2
+    zlevel = min(7, zlevel + zs[3])
     if (zlevel == 1) and dstate:
         return "@"
     else:
