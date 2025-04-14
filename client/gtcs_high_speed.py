@@ -209,6 +209,7 @@ def gtcs3_init(noload=False):
 def gtcs3_exit():
     global LEVEL
     LEVEL = 1
+    lkj_draw('white')
     turtle2.clear()
     limdraw.clear()
     limdraw.hideturtle()
@@ -383,10 +384,17 @@ def render_gtcs_main():
     elif curlkj == "@":
         lkj_draw('yellow')
         lkjdraw.penup()
-        lkjdraw.goto(-195,215)
+        lkjdraw.goto(-200,215)
         lkjdraw.write("2")
     elif curlkj == "3":
         lkj_draw('green')
+    elif curlkj in "4567":
+        lkj_draw('green')
+        lkjdraw.penup()
+        lkjdraw.color('white')
+        lkjdraw.goto(-200,215)
+        lkjdraw.write(str(int(curlkj)-2))
+        lkjdraw.color('black')
     else:
         lkj_draw('white')
     
@@ -591,10 +599,12 @@ def translate(signal):
         cspdlim = 120
     elif signal == "/" or signal == "<" or signal == ">":
         cspdlim = 60
-    elif ord(signal) >= 48 and ord(signal) < 58:
-        cspdlim = (ord(signal)-48)*10
+    elif signal.isdigit():
+        cspdlim = (int(signal))*10
     else:
         cspdlim = 0
+    if cspdlim > 240:
+        return 240
     return cspdlim
 
 autog3 = True
@@ -611,7 +621,12 @@ def update_loc(target):
         su = u.read().decode('utf-8')
         u.close()
         #print("Full text:",su)
-        signal = su.strip()[0]
+        sus = su.strip()
+        signal = "0"
+        if len(sus) > 1:
+            signal = sus[:2]
+        else:
+            signal = sus[0]
         g3err.append(time.ctime() + " GTCS-1: Receiving signal " + str(signal))
         cspdlim = translate(signal)
         if cspdlim == 0:
