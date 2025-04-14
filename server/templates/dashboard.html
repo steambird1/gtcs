@@ -2,112 +2,365 @@
 <html>
 <head>
 	<title>Fountaine MTR Dashboard</title>
+    <style>
+        .bdr {
+            border: 1px solid black;
+        }
+        .btn {
+            padding-right: 10px;
+        }
+    </style>
 	<script>
 	
-	// Move before resize !!
-	var MAP_MOVE_X = 220, MAP_MOVE_Y = 250, MAP_RESIZE_X = 1, MAP_RESIZE_Y = 1;
+        // Refer to server python file !!!
+        const SERVER_ZOOM = 250;
+        const infdist = 1e15;
+
+	    // Thanks to bing.
+	    var isDragging = false, startX, startY, scale = 1;
+	    const scaleFactor = 1.1;
 	
-	function xmv(x) {
-		return (x+MAP_MOVE_X)*MAP_RESIZE_X;
-	}
+	    // Move before resize !!
+	    var MAP_MOVE_X = 220, MAP_MOVE_Y = 250, MAP_RESIZE_X = 1, MAP_RESIZE_Y = 1;
 	
-	function ymv(y) {
-		return (y+MAP_MOVE_Y)*MAP_RESIZE_Y;
-	}
+	    function isdigit(x) {
+	        return /^\d+$/.test(x);
+	    }
+
+	    function xmv(x) {
+		    return (x+MAP_MOVE_X)*MAP_RESIZE_X;
+	    }
 	
-	function sigcolor(sigstr) {
-		switch (sigstr) {
-			case '.':
-				return 'green';
-				break;
-			case '1': case '2': case '3': case '4': case '5':
-			case '6': case '7': case '8': case '9': case '/': case '|': case '<': case '>':
-				return 'orange';
-				break;
-			default:
-				return 'red';
-				break;
-		}
-	}
+	    function ymv(y) {
+		    return (y+MAP_MOVE_Y)*MAP_RESIZE_Y;
+	    }
 	
-	setInterval(function() {
-	// Not supported for server with high stress.
-	/*
-		var v = document.getElementById('imgcont');
-		v.innerHTML = "";
-		var ig = document.createElement('img');
-		ig.src = "/state?heartbeat=" + Math.random();
-		v.appendChild(ig);
-	*/
-		var cd = document.getElementById('cvcont');
-		var cv = cd.getContext('2d');
-		cv.lineWidth = 4;
-		cv.clearRect(0, 0, cd.width, cd.height);
-		var xhr = new XMLHttpRequest();
-		xhr.open('GET', '/signalstates');
-		xhr.send(null);
-		xhr.onreadystatechange = function() {
-			if (xhr.readyState == 4) {
-				var xrt = xhr.responseText.split("\n");
-				for (let i = 0; i < xrt.length; i++) {
-					let crt = xrt[i].split(" ");
-					let xb = xmv(parseInt(crt[1])), yb = ymv(parseInt(crt[2]));
-					let xe = xmv(parseInt(crt[3])), ye = ymv(parseInt(crt[4]));
-					cv.beginPath();
-					cv.moveTo(xb, yb);
-					cv.lineTo(xe, ye);
-					let csc = sigcolor(crt[5]);
-					cv.strokeStyle = csc;
-					cv.fillStyle = csc;
-					if (csc != 'green') {
-						cv.fillText(crt[0] + ": " + crt[5], (xb+xe)/2, (yb+ye)/2);
-					}
-					cv.stroke();
-				}
-			}
-		};
+	    function sigcolor(xsigstr) {
+	        var sigstr = xsigstr.trim();
+	        if (sigstr == "0") return "red";
+	        if (isdigit(sigstr)) return "orange";
+		    switch (sigstr) {
+			    case '.':
+				    return 'green';
+				    break;
+			    case '/': case '|': case '<': case '>':
+				    return 'orange';
+				    break;
+			    default:
+				    return 'red';
+				    break;
+		    }
+	    }
+	
+	    var cxhrtext = [];
+	    var signals = {}, sigtotal = 0;
+	
+	    //xhr.responseText
+	    function systemRedraw(xhrtext) {
+		    if (xhrtext == undefined) xhrtext = cxhrtext;
+		    cxhrtext = xhrtext;// Auto caching
+		    var cd = document.getElementById('cvcont');
+		    var cv = cd.getContext('2d');
+		    cv.lineWidth = 4;
+		    cv.clearRect(0, 0, cd.width, cd.height);
+		    var xrt = xhrtext;
+		    for (let i = 0; i < xrt.length; i++) {
+			    if (xrt[i].trim() == "") continue;
+			    let crt = xrt[i].split(" ");
+			    let xb = xmv(parseInt(crt[1])), yb = ymv(parseInt(crt[2]));
+			    let xe = xmv(parseInt(crt[3])), ye = ymv(parseInt(crt[4]));
+			    cv.beginPath();
+			    cv.moveTo(xb, yb);
+			    cv.lineTo(xe, ye);
+			    let csc = sigcolor(crt[5]);
+			    cv.strokeStyle = csc;
+			    cv.fillStyle = csc;
+			    if (csc != 'green') {
+				    cv.fillText(crt[0] + ": " + crt[5], (xb+xe)/2, (yb+ye)/2);
+			    }
+			    cv.stroke();
+		    }
 		
-	}, 2000);
-	setInterval(function() {
-		var v = document.getElementById('srvt');
-		var xhr = new XMLHttpRequest();
-		xhr.open('GET', '/msg?mode=zeit');
-		xhr.send(null);
-		xhr.onreadystatechange = function() {
-			if (xhr.readyState == 4) v.innerHTML = xhr.responseText;
-		};
-	}, 500);
-	setInterval(function() {
-		var v = document.getElementById('msgs');
-		var xhr = new XMLHttpRequest();
-		xhr.open('GET', '/msg?mode=warung');
-		xhr.send(null);
-		xhr.onreadystatechange = function() {
-			if (xhr.readyState == 4) v.innerHTML = xhr.responseText;
-		};
-	}, 2000);
-	function go() {
-		var xhr = new XMLHttpRequest();
-		var sn = document.getElementById('sname');
-		var st = document.getElementById('stype');
-		var sp = document.getElementById('spwd');
-		if (st.value.length > 1) {
-			xhr.open('GET', "/diverg?sid=" + sn.value + "&stat=" + st.value + "&auth=" + sp.value);
-		} else {
-			xhr.open('GET', "/signalset?sid=" + sn.value + "&stat=" + st.value + "&auth=" + sp.value);
-		}
+	    }
+	
+	    setInterval(function() {
+	    // Not supported for server with high stress.
+	    /*
+		    var v = document.getElementById('imgcont');
+		    v.innerHTML = "";
+		    var ig = document.createElement('img');
+		    ig.src = "/state?heartbeat=" + Math.random();
+		    v.appendChild(ig);
+	    */
+		    //systemRedraw();
+		    var xhr = new XMLHttpRequest();
+		    xhr.open('GET', '/signalstates');
+		    xhr.send(null);
+		    xhr.onreadystatechange = function() {
+			    if (xhr.readyState == 4) {
+				    systemRedraw(xhr.responseText.split("\n"));
+			    }
+		    };
+	    }, 2000);
+	    setInterval(function() {
+		    var v = document.getElementById('srvt');
+		    var xhr = new XMLHttpRequest();
+		    xhr.open('GET', '/msg?mode=zeit');
+		    xhr.send(null);
+		    xhr.onreadystatechange = function() {
+			    if (xhr.readyState == 4) v.innerHTML = xhr.responseText;
+		    };
+	    }, 500);
+	    setInterval(function() {
+		    var v = document.getElementById('msgs');
+		    var xhr = new XMLHttpRequest();
+		    xhr.open('GET', '/msg?mode=warung');
+		    xhr.send(null);
+		    xhr.onreadystatechange = function() {
+			    if (xhr.readyState == 4) v.innerHTML = xhr.responseText;
+		    };
+	    }, 2000);
+	    function go() {
+		    var xhr = new XMLHttpRequest();
+		    var sn = document.getElementById('sname');
+		    var st = document.getElementById('stype');
+		    var sp = document.getElementById('spwd');
+		    if ((!isdigit(st.value)) && st.value.length > 1) {
+			    xhr.open('GET', "/diverg?sid=" + sn.value + "&stat=" + st.value + "&auth=" + sp.value);
+		    } else {
+			    xhr.open('GET', "/signalset?sid=" + sn.value + "&stat=" + st.value + "&auth=" + sp.value);
+		    }
 		
-		xhr.send(null);
-		xhr.onreadystatechange = function() {
-			if (xhr.readyState == 4) document.getElementById('result').innerHTML = xhr.responseText;
-			if (xhr.responseText == "?") alert("Password might be wrong.");
-		};
-	}
-	function clean() {
-		var xhr = new XMLHttpRequest();
-		xhr.open('GET', '/msg?mode=clr');
-		xhr.send(null);
-	}
+		    xhr.send(null);
+		    xhr.onreadystatechange = function() {
+			    if (xhr.readyState == 4) document.getElementById('result').innerHTML = xhr.responseText;
+			    if (xhr.responseText == "?") alert("Password might be wrong.");
+		    };
+	    }
+	    function clean() {
+		    var xhr = new XMLHttpRequest();
+		    xhr.open('GET', '/msg?mode=clr');
+		    xhr.send(null);
+	    }
+	    function render(id) {
+	        document.getElementById(id).style.display = "block";
+	    }
+	    function unRender(id) {
+	        document.getElementById(id).style.display = "none";
+	    }
+    
+        // Generate path by using O(n^2) dijkstra.
+        // Unless Zhongli or Jean give me 100 000 mora, I will not
+        // optimize this.
+
+	    function loadAsSignals() {
+	        var signals_raw = cxhrtext;
+	        signals = {};
+	        sigtotal = 0;
+	        for (let i = 0; i < signals_raw.length; i++) {
+	            let scur = signals_raw[i];
+	            if (scur.trim() == "") continue;
+	            try {
+	                let skv = scur.split(" ", 1);
+	                let scpos = scur.indexOf(" ");
+	                if (scpos < 0) {
+                        throw "Unexpected format!"
+	                }
+	                let skdata = scur.slice(scpos + 1).split(" ");
+	                signals[skv[0]] = skdata;   // NOTICES THAT THEY ARE ALL STRINGS
+	                signals[skv[0]][5] = signals[skv[0]][5].split(",");
+	                for (let j = 0; j < 4; j++) {
+	                    signals[skv[0]][j] = parseInt(signals[skv[0]][j]);
+	                }
+	                sigtotal++; // So that malfunctioning ones won't be added
+	            } catch (e) {
+	                console.log(e);
+	            }
+	        }
+	    }
+
+	    function distanceBetween(x1, y1, x2, y2) {
+	        return Math.sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
+	    }
+
+	    function generatePath() {
+	        if (cxhrtext.length <= 0) {
+	            alert("Data of signals are not ready, please wait for fetching.");
+	            return;
+	        }
+	        var signal_graph = {}, dist = {}, zu = {}, visited = {};
+	        var von = document.getElementById('sgvon').value;
+	        var nach = document.getElementById('sgnach').value;
+	        var skip_danger = document.getElementById('no_red').checked;
+	        var finalta = document.getElementById('sgnames');
+	        // 1. Unload as dictionary
+	        loadAsSignals();
+	        // 2. Load distances
+	        for (let i in signals) {
+	            signal_graph[i] = {};
+	        }
+	        for (let i in signals) {
+	            dist[i] = infdist;
+	            if (signals[i][4] == "0" && skip_danger) continue;
+	            /*if (!(i in dist)) {
+	                signal_graph[i] = {};
+	            }*/
+	            let mydist = distanceBetween(signals[i][0], signals[i][1], signals[i][2], signals[i][3]);
+	            for (let j = 0; j < signals[i][5].length; j++) {
+	                //dist[i][signals[i][5]]
+	                let t = signals[i][5][j];
+	                if (signals[t][4] == "0" && skip_danger) continue;
+	                let aliendist = mydist + distanceBetween(signals[i][2], signals[i][3], signals[t][0], signals[t][1]);
+	                signal_graph[i][t] = aliendist;
+	            }
+	        }
+	        dist[von] = 0;
+	        //visited[von] = true;
+	        zu[von] = "";   // i.e., null.
+	        for (let i = 0; i < sigtotal; i++) {
+	            let minsig = "", minval = infdist;
+	            for (let j in dist) {
+	                if ((!(j in visited)) && (dist[j] < minval)) {
+	                    minval = dist[j];
+	                    minsig = j;
+	                }
+	            }
+	            if (minsig == "") break;
+	            visited[minsig] = true;
+	            for (let j in signal_graph[minsig]) {
+	                let newdist = minval + signal_graph[minsig][j];
+	                if (newdist < dist[j]) {
+	                    dist[j] = newdist;
+	                    zu[j] = minsig;
+	                }
+	            }
+	        }
+	        if (!(nach in zu)) {
+	            alert("Failed to find a route!");
+	            return;
+	        }
+	        var result = "", cur = nach;
+	        while (zu[cur] != "") {
+	            result = ", " + cur + result;
+	            cur = zu[cur];
+	        }
+	        result = von + result;
+	        finalta.value = result;
+	    }
+
+	    var exec_result = "";
+	    var exec_target = [], exec_para = null;
+
+	    function end_diverg() {
+	        document.getElementById('progress').innerHTML = "Done!";
+	        document.getElementById('execresult').innerHTML = exec_result;
+	    }
+
+	    function end_signal() {
+	        document.getElementById('progress').innerHTML = "Done!";
+	        document.getElementById('execresult').innerHTML = exec_result;
+	    }
+
+	    function set_diverg(n) {
+	        if (n >= exec_target.length - 1) {
+	            end_diverg();
+	            return;
+	        }
+	        document.getElementById('progress').innerHTML = n + " of " + (exec_target.length - 1) + " completed";
+	        var xhr = new XMLHttpRequest();
+	        var sp = document.getElementById('spwd');
+	        xhr.open('GET', "/diverg?sid=" + exec_target[n] + "&stat=" + exec_target[n+1] + "&auth=" + sp.value);
+	        xhr.send(null);
+	        xhr.onreadystatechange = function () {
+	            if (xhr.readyState == 4) {
+	                exec_result += exec_target[n] + ": " + xhr.responseText;
+	                set_diverg(n + 1);
+	            }
+	        }
+	    }
+
+	    function set_signal(n) {
+	        if (n >= exec_target.length) {
+	            end_signal();
+	            return;
+	        }
+	        var xhr = new XMLHttpRequest();
+	        document.getElementById('progress').innerHTML = n + " of " + (exec_target.length) + " completed";
+	        var sp = document.getElementById('spwd');
+	        xhr.open('GET', "/signalset?sid=" + exec_target[n] + "&stat=" + exec_para + "&auth=" + sp.value);
+	        xhr.send(null);
+	        xhr.onreadystatechange = function () {
+	            if (xhr.readyState == 4) {
+	                exec_result += exec_target[n] + ": " + xhr.responseText;
+	                set_signal(n + 1);
+	            }
+	        }
+	    }
+
+	    function proceed() {
+	        exec_result = "";
+	        exec_target = document.getElementById('sgnames').value.split(",");
+	        for (let i = 0; i < exec_target.length; i++) {
+	            exec_target[i] = exec_target[i].trim();
+	        }
+	        if (document.getElementById('diverg_mode').checked) {
+	            set_diverg(0);
+	        } else if (document.getElementById('signal_mode').checked) {
+	            exec_para = document.getElementById('signal_conf').value;
+	            set_signal(0);
+	        } else {
+	            alert("Please select mode before executing!");
+	        }
+	    }
+	    window.onload = function() {
+		    var canvas = document.getElementById('cvcont');
+		    var ctx = canvas.getContext('2d');
+	
+		    canvas.addEventListener('mousedown', (e) => {
+			    isDragging = true;
+			    startX = e.offsetX;
+			    startY = e.offsetY;
+		    });
+
+		    canvas.addEventListener('mousemove', (e) => {
+			    if (isDragging) {
+				    const dx = e.offsetX - startX;
+				    const dy = e.offsetY - startY;
+				    ctx.translate(dx, dy);
+				    startX = e.offsetX;
+				    startY = e.offsetY;
+				    systemRedraw();
+			    }
+		    });
+
+		    canvas.addEventListener('mouseup', () => {
+			    isDragging = false;
+		    });
+
+		    canvas.addEventListener('wheel', (e) => {
+			    e.preventDefault();
+			    const mouseX = e.offsetX;
+			    const mouseY = e.offsetY;
+			    ctx.translate(mouseX, mouseY);
+			    if (e.deltaY < 0) {
+			        scale *= scaleFactor;
+			        ctx.scale(scaleFactor, scaleFactor);
+			    } else {
+			        scale /= scaleFactor;
+			        ctx.scale(1/scaleFactor, 1/scaleFactor);
+			    }
+			    
+			    ctx.translate(-mouseX, -mouseY);
+			    systemRedraw();
+		    });
+	    };
+	    function resetScale() {
+	        var canvas = document.getElementById('cvcont');
+	        var ctx = canvas.getContext('2d');
+	        ctx.translate(0, 0);
+	        ctx.scale(1 / scale, 1 / scale);
+	        scale = 1;
+	    }
 	</script>
 </head>
 <body>
@@ -131,12 +384,51 @@
 <a href="/befehlgui" target="_blank">Order Delivery</a>
 <span>&nbsp;|&nbsp;</span>
 <a href="/signaldisp" target="_blank">Alternative signal display</a>
+<span>&nbsp;|&nbsp;</span>
+<a href="javascript:;" onclick="render('batch_proc'); document.getElementById('progress').innerHTML = '';">Batch Process</a>
+<div class="bdr" id="batch_proc" style="display: none;">
+
+<strong>Step 1. Select Path</strong>
+<br />
+<strong>From: </strong>
+<input type="text" id="sgvon" />
+<strong>To: </strong>
+<input type="text" id="sgnach" />
+<br />
+<input type="checkbox" id="no_red" /><span>Disable signals at Danger</span>
+<br />
+<span style="color: red;">Path generation may takes a long time.</span>
+<br />
+<button class="btn" onclick="generatePath();">Generate Path</button>
+<br />
+<strong>Step 2. Revise/Specify Generated Path</strong>
+<br />
+<p>Input signal names, split by comma (',').</p>
+<textarea id="sgnames"></textarea>
+<br />
+<strong>Step 3. Specify Execution</strong>
+<br />
+<input type="radio" id="diverg_mode" name="exec_mode" /><span>Configure diverging track as given</span>
+<br />
+<input type="radio" id="signal_mode" name="exec_mode" /><span>Configure signals as: </span><input type="text" id="signal_conf" />
+<hr />
+<span style="color: red;">Final process requires password.&nbsp;&nbsp;</span>
+<button class="btn" onclick="proceed()">Proceed</button>
+<button class="btn" onclick="unRender('batch_proc');">Cancel</button>
+<p id="progress" style="color: green;"></p>
+<p>Result:</p>
+<p id="execresult" style="color: blue;"></p>
+<button class="btn" onclick="document.getElementById('execresult').innerHTML = '';">Clear</button>
+
+</div>
 <hr />
 <!--
 <div id="imgcont">
 
 </div>
 -->
+<a href="javascript:;" onclick="resetScale()">Reset Scale</a>
+<br />
 <canvas id="cvcont" width="800" height="600">
 
 </canvas>
