@@ -65,6 +65,8 @@ if __name__ == '__main__':
 
 If you don't have a server, you can look for a TinyWebDB service and use it by running `server_transition.py` and client at the same time. **Notice that permission control won't work in this case, so don't use it for productive environment (although I guess there won't be anyone doing so...)**
 
+Note: You'd better register a database account on your own and change the username and secret in the program for a better experience.
+
 ## Usage
 
 For usage, refer to User Manual RTF File and Wiki pages (coming soon).
