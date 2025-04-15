@@ -315,7 +315,9 @@ def lkjdisp():
         if zs[1] in "/":
             return "1"
         elif zs[1].isdigit():
-            if int(zs[1]) < 10:
+            if zs[1] == "0":
+                return "0"
+            elif int(zs[1]) < 10:
                 return "1"
             else:
                 return "2"
