@@ -632,7 +632,7 @@ t.screen.onkey(ksupp, '9')
 t.screen.onkey(befclr, '8')
 # Also for confirmation.
 t.screen.onkey(befshow2, '7')
-t.screen.onkey(locupd, '6')
+#t.screen.onkey(locupd, '6')
 t.screen.onkey(schutz_cancel, '5')
 
 #t.screen.onkey(test1, 'a')
