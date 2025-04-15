@@ -2,9 +2,11 @@ import turtle
 import time
 from urllib.request import urlopen
 import threading
+import random
 
 AUTH="_~_amber~_~"
 
+FONT=('Arial', 10, 'normal')
 LEVEL=1
 SCTR="http://127.0.0.1:5033/signal"
 ZCTR="http://127.0.0.1:5033/zug"
@@ -12,6 +14,9 @@ DCTR="http://127.0.0.1:5033/zugdist"
 BCTR="http://127.0.0.1:5033/befehl"
 LCTR="http://127.0.0.1:5033/lkjdisp"
 ZUGNAME="ice1"
+SCHUTZ_SIMU=True
+SCHUTZ_PROB=1
+DARK=True
 
 # GTCS data collector
 nextdist=0
@@ -27,6 +32,8 @@ zugat=""
 power=0
 curlkj="?"
 prereded=False
+schutz=False
+schutz_info=""
 
 turtle.tracer(False)
 
@@ -64,6 +71,22 @@ befehldisp.goto(-160, 220)
 xspdraw.goto(-160,40)
 lkjdraw.goto(-200, 200)
 spdhint.goto(-155, 5)
+
+if DARK:
+    turtle.bgcolor('black')
+    turtle.pencolor('white')
+    turtle2.pencolor('white')
+    turtle3.pencolor('white')
+    maxspder.pencolor('white')
+    acreqer.pencolor('white')
+    spdturtle.pencolor('white')
+    thrturtle.pencolor('white')
+    infobar.pencolor('white')
+    spdraw.pencolor('white')
+    befehldisp.pencolor('white')
+    xspdraw.pencolor('white')
+    lkjdraw.pencolor('white')
+    spdhint.pencolor('white')
 
 xspdraw.speed('fastest')
 befehldisp.speed('fastest')
@@ -127,7 +150,10 @@ def render_bar():
     for i in range(10):
         turtle3.pendown()
         if not light[i]:
-            turtle3.fillcolor("white")
+            if DARK:
+                turtle3.fillcolor('black')
+            else:
+                turtle3.fillcolor("white")
             turtle3.begin_fill()
             for j in range(4):
                 turtle3.forward(40)
@@ -149,7 +175,10 @@ def render_bar():
             turtle3.forward(20)
             turtle3.pencolor(xcolor[i])
             turtle3.write(iustr[i])
-            turtle3.pencolor("black")
+            if DARK:
+                turtle3.pencolor('white')
+            else:
+                turtle3.pencolor("black")
             turtle3.left(90)
             turtle3.forward(20)
             turtle3.right(90)
@@ -185,14 +214,21 @@ def gtcs3_load():
     limdraw.pensize(3)
     limdraw.goto(-320, min(220, nextdist/20))
     limdraw.penup()
+    if (nextdist/20) >= 220:
+        limdraw.goto(-320, 240)
+        limdraw.write(str(round(nextdist/1000, 2)), font=FONT)
+        limdraw.hideturtle()
     xspdraw.clear()
     xspdraw.penup()
     xspdraw.goto(-165, 40)
     if lastspdlim < curspeed:
         xspdraw.pencolor('orange')
     else:
-        xspdraw.pencolor('green')
-    xspdraw.write(str(lastspdlim))
+        if DARK:
+            xspdraw.pencolor('green2')
+        else:
+            xspdraw.pencolor('green')
+    xspdraw.write(str(lastspdlim),font=FONT)
 
 def gtcs3_init(noload=False):
     global LEVEL
@@ -202,7 +238,7 @@ def gtcs3_init(noload=False):
     turtle2.goto(-300, 0)
     for i in range(0,200,20):
         turtle2.goto(-300, i)
-        turtle2.write(str(i*20))
+        turtle2.write(str(i*20),font=FONT)
     if not noload:
         gtcs3_load()
 
@@ -229,7 +265,7 @@ def render_gtcs():
     #turtle.circle(80, -60)
     for i in range(0, 300, 60):
         turtle.circle(80, -60)
-        turtle.write(str(i))
+        turtle.write(str(i),font=FONT)
     turtle.right(turtle.heading())
     #turtle.circle(80, -60)
     turtle.goto(160, 0)
@@ -240,7 +276,7 @@ def render_gtcs():
     #turtle.circle(80, -60)
     for i in range(0, 300, 60):       
         turtle.circle(80, -60)
-        turtle.write(str(abs(i-120)//2))
+        turtle.write(str(abs(i-120)//2),font=FONT)
     #turtle.left(90)
     if LEVEL >= 3:
         gtcs3_init(True)
@@ -354,20 +390,22 @@ def render_gtcs_main():
     spdraw.penup()
     spdraw.goto(-165, 80)
     #spdraw.
-    spdraw.write(str(int(curspeed)))
+    spdraw.write(str(int(curspeed)),font=FONT)
     infobar.clear()
     # Generate info
     for i in gtcsinfo:
+        if DARK and i[1] == "blue":
+            i[1] = "cyan"
         infobar.pencolor(i[1])
         infobar.pendown()
-        infobar.write(i[0])
+        infobar.write(i[0],font=FONT)
         infobar.penup()
         infobar.goto(infobar.xcor(), infobar.ycor()-30)
     infobar.goto(120, -120)
     for i in sysinfo:
         infobar.pencolor(i[1])
         infobar.pendown()
-        infobar.write(i[0])
+        infobar.write(i[0],font=FONT)
         infobar.penup()
         infobar.goto(infobar.xcor(), infobar.ycor()-30)
     if curlkj == "0" or curlkj == "00":
@@ -385,7 +423,7 @@ def render_gtcs_main():
         lkj_draw('yellow')
         lkjdraw.penup()
         lkjdraw.goto(-200,215)
-        lkjdraw.write("2")
+        lkjdraw.write("2",font=FONT)
     elif curlkj == "3":
         lkj_draw('green')
     elif curlkj in "4567":
@@ -393,7 +431,7 @@ def render_gtcs_main():
         lkjdraw.penup()
         lkjdraw.color('white')
         lkjdraw.goto(-200,215)
-        lkjdraw.write(str(int(curlkj)-2))
+        lkjdraw.write(str(int(curlkj)-2),font=FONT)
         lkjdraw.color('black')
     else:
         lkj_draw('white')
@@ -411,7 +449,7 @@ def render_gtcs_main():
     lkjdraw.goto(-200, 200)
     render_bar()
     turtle.update()
-    turtle.ontimer(render_gtcs_main, 100)
+    turtle.ontimer(render_gtcs_main, 200)
 
 def kup():
     global power, thrust
@@ -447,7 +485,7 @@ plog = []
 tcnter1 = 0
 
 def physics():
-    global lastspdlim, tcnter1, plog, contnz, caccel, limitz, accuer, curspeed, thrust, gtcsinfo, accreq, power, acreqspd, LEVEL
+    global lastspdlim, tcnter1, plog, contnz, caccel, limitz, accuer, curspeed, thrust, gtcsinfo, accreq, power, acreqspd, LEVEL, schutz, schutz_info
     if power < 0 or curspeed < 20:
         thrust = power / 2
     else:
@@ -489,9 +527,11 @@ def physics():
             #cacreqspd = max(acreqspd,limitz[0] + 5)
             #    if len(limitz) > 10:
             #        limitz = limitz[1:]
-            if cacreqspd < 240:
-                gtcsinfo.append(["GTCS-"+str(LEVEL)+" deflection " + str(int(cacreqspd)) + " km/h","orange"])
-            gtcsinfo.append(["Acceleration " + str(round(accreq,2)),"orange"])
+            #if cacreqspd < 240:
+            #    gtcsinfo.append(["GTCS-"+str(LEVEL)+" deflection " + str(int(cacreqspd)) + " km/h","orange"])
+            #gtcsinfo.append(["Acceleration " + str(round(accreq,2)),"orange"])
+            if accreq >= 2:
+                gtcsinfo.append(["Deflect now", "orange"])
             light[2] = True
         if ((LEVEL >= 2) and curspeed > (cacreqspd + 3)) and (accreq < -2):
             contnz += 0.5
@@ -524,6 +564,9 @@ def physics():
                 acreqspd = 0
             if acreqspd < min(lastspdlim,spdlim):
                 acreqspd = min(lastspdlim,spdlim)
+        if schutz:
+            light[3] = True
+            gtcsinfo.append([schutz_info, "red"])
         #limitz.append(acreqspd)
         #gtcsinfo = []
         if light[3]:
@@ -532,7 +575,10 @@ def physics():
                     power -= 4
                 else:
                     power -= 10
-            gtcsinfo.append(["Zwangsbremsung", "red"])
+            if schutz:
+                gtcsinfo.append(["Schutzbremsung", "red"])
+            else:
+                gtcsinfo.append(["Zwangsbremsung", "red"])
     if light[6]:
         gtcsinfo.append(["Magnet-brake", "blue"])
     
@@ -565,7 +611,7 @@ def befshow(bcset=False):
     befehldisp.goto(-160, 220)
     bs = befehltext.split("\n")
     for i in bs:
-        befehldisp.write(i)
+        befehldisp.write(i,font=FONT)
         befehldisp.goto(-160, befehldisp.ycor()-10)
     if bcset:
         befconf = True
@@ -577,12 +623,25 @@ def befclr():
     global befehltext
     befehldisp.clear()
 
+def locupd():
+    tloc = turtle.textinput("GTCS", "Input current location:")
+    if tloc != "":
+        update_loc(tloc)
+
+def schutz_cancel():
+    global schutz
+    schutz = False
+    light[3] = False
+
+
 t.screen.onkey(kup, 'Up')
 t.screen.onkey(kdn, 'Down')
 t.screen.onkey(ksupp, '9')
 t.screen.onkey(befclr, '8')
 # Also for confirmation.
 t.screen.onkey(befshow2, '7')
+t.screen.onkey(locupd, '6')
+t.screen.onkey(schutz_cancel, '5')
 
 #t.screen.onkey(test1, 'a')
 #t.screen.onkey(test2, 's')
@@ -665,8 +724,14 @@ g3err = []
 GLOGGING = False
 PLOGGING = False
 
+def schutz_broadcast(info):
+    global schutz, schutz_info
+    schutz = True
+    schutz_info = info
+
+
 def console():
-    global SCTR, ZCTR, DCTR, BCTR, LCTR, GLOGGING, PLOGGING, plog, ZUGNAME, spdlim, zugat, gtcsinfo, accreq, acreqspd, thrust, accuer, LEVEL, g3err, autog3
+    global SCHUTZ_PROB, SCHUTZ_SIMU, SCTR, ZCTR, DCTR, BCTR, LCTR, GLOGGING, PLOGGING, plog, ZUGNAME, spdlim, zugat, gtcsinfo, accreq, acreqspd, thrust, accuer, LEVEL, g3err, autog3
     while True:
         ip = input(">>> ")
         cmd = ip.split(" ")
@@ -702,6 +767,8 @@ def console():
                 print(thrust)
             elif cmd[1] == "4":
                 print(accuer)
+            elif cmd[1] == "5":
+                print(schutz)
         elif cmd[0] == "glog":
             print("Currently GTCS",LEVEL)
             print("\n".join(g3err))
@@ -741,6 +808,16 @@ def console():
             DCTR="http://{ip}:5033/zugdist".format(ip=cmd[1])
             BCTR="http://{ip}:5033/befehl".format(ip=cmd[1])
             LCTR="http://{ip}:5033/lkjdisp".format(ip=cmd[1])
+        elif cmd[0] == "schutz":
+            if len(cmd) < 2:
+                SCHUTZ_SIMU = not SCHUTZ_SIMU
+                print("Schutz simulator is now",SCHUTZ_SIMU)
+            else:
+                if cmd[1].isdigit():
+                    SCHUTZ_PROB = int(cmd[1])
+                    print("Schutz probability is now",SCHUTZ_PROB)
+                else:
+                    schutz_broadcast(cmd[1])
         else:
             print("Invalid command")
 
@@ -812,13 +889,21 @@ def gtcs3():
         time.sleep(2)
 
 def logclr():
-    global GLOGGING, PLOGGING, g3err, plog
+    global GLOGGING, PLOGGING, g3err, plog, SCHUTZ_SIMU, SCHUTZ_PROB
+
+    SCHUTZ_AFFAIR = ["Hilichurlwarung", "Slimenwarung", "Eisenbahnfaulwarung", "Unerwartetelementwarung", "Abyssmagewarung"]
+
     while True:
         if not GLOGGING:
             g3err = []
         if not PLOGGING:
             plog = []
-        time.sleep(1)
+        if SCHUTZ_SIMU:
+            if not schutz:
+                if random.randint(0, 100) < SCHUTZ_PROB:
+                    schutz_broadcast(random.choice(SCHUTZ_AFFAIR))
+        time.sleep(5)
+        
         
 def befread():
     global g3err, BCTR, AUTH, befehltext, befconf, ZUGNAME
