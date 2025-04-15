@@ -340,7 +340,9 @@ def lkjdisp():
         zlevel = 0
         dstate = True
     elif zs[1].isdigit():
-        if int(zs[1]) < 10:
+        if zs[1] == "0":
+            zlevel = 0
+        elif int(zs[1]) < 10:
             zlevel = 1
         else:
             zlevel = 2
