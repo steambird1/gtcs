@@ -420,13 +420,16 @@ def render_gtcs_main():
     elif curlkj == "2":
         lkj_draw('green', 'yellow')
     elif curlkj == "@":
+        lkjdraw.color('white')
         lkj_draw('yellow')
         lkjdraw.penup()
         lkjdraw.goto(-200,215)
+        lkjdraw.color('black')
         lkjdraw.write("2",font=FONT)
     elif curlkj == "3":
         lkj_draw('green')
     elif curlkj in "4567":
+        lkjdraw.color('white')
         lkj_draw('green')
         lkjdraw.penup()
         lkjdraw.color('white')
@@ -466,7 +469,10 @@ def kdn():
     power = (power//10)*10-10
 
 def ksupp():
-    global accreq, spdlim, lastspdlim
+    global accreq, spdlim, lastspdlim, on_keyboard
+    if on_keyboard:
+        keyboard_add('8')
+        return
     if not light[9]:
         gtcs3_exit()
         accreq = 0
@@ -530,7 +536,7 @@ def physics():
             #if cacreqspd < 240:
             #    gtcsinfo.append(["GTCS-"+str(LEVEL)+" deflection " + str(int(cacreqspd)) + " km/h","orange"])
             #gtcsinfo.append(["Acceleration " + str(round(accreq,2)),"orange"])
-            if accreq >= 2:
+            if accreq < -1.5:
                 gtcsinfo.append(["Deflect now", "orange"])
             light[2] = True
         if ((LEVEL >= 2) and curspeed > (cacreqspd + 3)) and (accreq < -2):
@@ -603,24 +609,45 @@ def test4():
     accreq += 1
     
 befehltext = ""
+bns = ""
 befconf = False
 
+keyboard = ""
+on_keyboard = False
+next_keyboard = lambda: None
+
 def befshow(bcset=False):
-    global befehltext, befconf
+    global bns, befehltext, befconf, keyboard, on_keyboard
     befehldisp.clear()
-    befehldisp.goto(-160, 220)
+    befehldisp.goto(-160, 240)
     bs = befehltext.split("\n")
+    bs.append(bns)
+    if on_keyboard:
+        bs.append(keyboard)
     for i in bs:
         befehldisp.write(i,font=FONT)
-        befehldisp.goto(-160, befehldisp.ycor()-10)
+        befehldisp.goto(-160, befehldisp.ycor()-15)
     if bcset:
         befconf = True
 
+def keyboard_add(char):
+    global keyboard, on_keyboard
+    if on_keyboard:
+        keyboard += char
+        befshow()
+
 def befshow2():
+    global on_keyboard
+    if on_keyboard:
+        keyboard_add('7')
+        return
     befshow(True)
 
 def befclr():
-    global befehltext
+    global befehltext, on_keyboard
+    if on_keyboard:
+        keyboard_add('8')
+        return
     befehldisp.clear()
 
 def locupd():
@@ -629,10 +656,38 @@ def locupd():
         update_loc(tloc)
 
 def schutz_cancel():
-    global schutz
+    global schutz, on_keyboard
+    if on_keyboard:
+        keyboard_add('5')
+        return
     schutz = False
     light[3] = False
 
+def locshow():
+    global zugat, befehltext, on_keyboard
+    if on_keyboard:
+        keyboard_add('6')
+        return
+    befehltext = "Current location: " + zugat
+    befshow()
+
+def change_loc_nxstep():
+    global keyboard, on_keyboard, next_keyboard
+    update_loc(keyboard)
+    on_keyboard = False
+    next_keyboard = lambda: None
+    befclr()
+
+def change_loc():
+    global bns, on_keyboard, next_keyboard
+    if on_keyboard:
+        keyboard_add('4')
+        return
+    keyboard = ""
+    bns = "Input new location:"
+    next_keyboard = change_loc_nxstep
+    on_keyboard = True
+    befshow()
 
 t.screen.onkey(kup, 'Up')
 t.screen.onkey(kdn, 'Down')
@@ -640,13 +695,28 @@ t.screen.onkey(ksupp, '9')
 t.screen.onkey(befclr, '8')
 # Also for confirmation.
 t.screen.onkey(befshow2, '7')
-#t.screen.onkey(locupd, '6')
+t.screen.onkey(locshow, '6')
 t.screen.onkey(schutz_cancel, '5')
+t.screen.onkey(change_loc, '4')
 
-#t.screen.onkey(test1, 'a')
-#t.screen.onkey(test2, 's')
-#t.screen.onkey(test3, 'd')
-#t.screen.onkey(test4, 'f')
+for i in '0123qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM':
+    t.screen.onkey(eval("lambda: keyboard_add('{}')".format(i)), i)
+
+t.screen.onkey(lambda: keyboard_add('_'), ',')
+
+def discard_keyboard():
+    global on_keyboard, keyboard, next_keyboard
+    on_keyboard = False
+    keyboard = ""
+    next_keyboard = lambda: None
+    befclr()
+
+def proceed_keyboard():
+    global on_keyboard, keyboard, next_keyboard
+    next_keyboard()
+
+t.screen.onkey(discard_keyboard, '.')
+t.screen.onkey(proceed_keyboard, '/')
 
 t.screen.listen()
 
@@ -768,7 +838,7 @@ def console():
             elif cmd[1] == "4":
                 print(accuer)
             elif cmd[1] == "5":
-                print(schutz)
+                print(curlkj)
         elif cmd[0] == "glog":
             print("Currently GTCS",LEVEL)
             print("\n".join(g3err))
