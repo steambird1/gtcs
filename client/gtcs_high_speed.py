@@ -964,7 +964,7 @@ def gtcs3():
 def logclr():
     global GLOGGING, PLOGGING, g3err, plog, SCHUTZ_SIMU, SCHUTZ_PROB
 
-    SCHUTZ_AFFAIR = ["Hilichurlwarung", "Slimenwarung", "Eisenbahnfaulwarung", "Unerwartetelementwarung", "Abyssmagewarung"]
+    SCHUTZ_AFFAIR = ["Hilichurlwarnung", "Slimenwarnung", "Eisenbahnfaulwarnung", "Unerwartetelementwarnung", "Abyssmagewarnung"]
 
     while True:
         if not GLOGGING:
