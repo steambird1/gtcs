@@ -192,9 +192,11 @@ def addstation(name,station,sxd,syd,mxd,myd,dn=""):
     ext = name + "_" + station + "_ext"
     signals[getlatest(name)][3].insert(0,ent)
     signals[ent] = [cstat[0],[cstat[0][0]+sxd,cstat[0][1]+syd],GREEN,[ext],0]
+    signals[ent][3].append(getlatest(name))
     sids[name] += 1
     if dn != "":
         signals[ent][3].append(dn + "_" + station + "_ext")
+    #sig_last_mod[ent] = time.time()
     signals[ext] = [[cstat[0][0]+mxd,cstat[0][1]+myd],[cstat[0][0]+sxd+mxd,cstat[0][1]+syd+myd],RED,[ent,name+str(sids[name])],1]
     signals[name+str(sids[name])] = [[cstat[0][0]+sxd+mxd,cstat[0][1]+syd+myd],[cstat[0][0]+(sxd*2)+mxd,cstat[0][1]+(syd*2)+myd],RED,[ext],0]
 """
@@ -259,6 +261,24 @@ addstation("M_dn","lyg",0,-2,0,-3,"M_up")
 
 signals["M_up2"][3].append("M_upt_lyg")
 signals["M_dn79"][3].append("M_dnt_lyg")
+
+draw_line("V_up",130,160,200,160,5)
+addstation("V_up", "Sternfall", 2, 0, 3, 0, "V_dn")
+draw_line("V_up",205,160,245,200,5)
+addstation("V_up", "Windsehenberg", 0, 2, 0, 3, "V_dn")
+draw_line("V_up",245,205,310,270,5)
+addstation("V_up", "Dandelions", 0, 2, 0, 3, "V_dn")
+draw_line("V_dn",320,280,315,275,-5)
+addstation("V_dn", "Dandelions", 0, -2, 0, -3, "V_up")
+draw_line("V_dn",310,270,245,205,-5)
+addstation("V_dn", "Windsehenberg", 0, -2, 0, -3, "V_up")
+draw_line("V_dn",245,200,205,160,-5)
+addstation("V_dn", "Sternfall", -2, 0, -3, 0, "V_up")
+draw_line("V_dn",200,160,130,160,-5)
+
+signals["M_up_Quessw_ext"][3].append("V_up1")
+signals[getlatest("V_dn")][3].append("M_dn_Quessw_ent")
+signals[getlatest("V_dn")][4] = 1
 
 #signals = {"z0":[[-220,0],[180,0],GREEN,["z1"],0],"z1":[[-180,0],[80,0],GREEN,["z2","z3"],0],"z2":[[80,0],[180,0],GREEN,[],0],"z3":[[80,-60],[180,-80],GREEN,[],0]}
 visit = []
