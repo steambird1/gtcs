@@ -660,7 +660,7 @@ autog3 = True
 ospeed = spdlim
 
 def update_loc(target):
-    global prereded, accuer, lastspdlim, g3err, LEVEL, zugat, spdlim, accreq, ZUGNAME, autog3, ospeed, AUTH
+    global curlkj, prereded, accuer, lastspdlim, g3err, LEVEL, zugat, spdlim, accreq, ZUGNAME, autog3, ospeed, AUTH
     try:
         if zugat != "":
             u = urlopen(ZCTR + "?sid=" + zugat + "&type=1&name=" + ZUGNAME + "&auth=" + AUTH)
@@ -757,7 +757,7 @@ def console():
             elif cmd[1] == "4":
                 print(accuer)
             elif cmd[1] == "5":
-                print(schutz)
+                print(curlkj)
         elif cmd[0] == "glog":
             print("Currently GTCS",LEVEL)
             print("\n".join(g3err))
@@ -871,6 +871,9 @@ def gtcs3():
                 su = u.read().decode('utf-8')
                 u.close()
                 curlkj = su
+                if lastspdlim <= 0:
+                    curlkj = "00"
+                    prereded = True
                 #print("Accumulate",accuer,nextdist)
             except Exception as e:
                 g3err.append(time.ctime() + " GTCS-3:" + str(e))

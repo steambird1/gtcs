@@ -882,6 +882,9 @@ def gtcs3():
                 su = u.read().decode('utf-8')
                 u.close()
                 curlkj = su
+                if lastspdlim <= 0:
+                    curlkj = "00"
+                    prereded = True
                 #print("Accumulate",accuer,nextdist)
             except Exception as e:
                 g3err.append(time.ctime() + " GTCS-3:" + str(e))
