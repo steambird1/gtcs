@@ -3,6 +3,15 @@ import time
 from urllib.request import urlopen
 import threading
 import random
+import os
+from collections import deque
+
+VENTI = True
+try:
+    from playsound import playsound
+except:
+    VENTI = False
+    print("Unable to load Venti. Running without voice!")
 
 AUTH="_~_amber~_~"
 
@@ -34,6 +43,34 @@ curlkj="?"
 prereded=False
 schutz=False
 schutz_info=""
+
+ps_queue=deque()
+
+def start_sound(name):
+    global VENTI, ps_queue
+    if VENTI:
+        if len(ps_queue) > 0:
+            cr = ps_queue.pop()
+            ps_queue.append(cr)
+            if cr == name:
+                return
+        ps_queue.append(name)
+
+def sound_thr():
+    global VENTI, ps_queue
+    cfn = os.path.split(os.path.realpath(__file__))[0]
+    if cfn[:-1] not in ["/", "\\"]:
+        cfn = cfn + "/"
+    cfn = cfn + "audio/"
+    while True:
+        if len(ps_queue) > 0:
+            cur = ps_queue.popleft()
+            if VENTI:
+                try:
+                    playsound(cfn + cur + ".mp3")
+                except:
+                    pass
+        time.sleep(1)
 
 turtle.tracer(False)
 
@@ -250,6 +287,7 @@ def gtcs3_exit():
     limdraw.clear()
     limdraw.hideturtle()
     xspdraw.clear()
+    start_sound("gexit")
 
 # GTCS renderer
 def render_gtcs():
@@ -316,8 +354,10 @@ def lkj_draw(col1,col2=""):
         lkjdraw.circle(20, 180)
         lkjdraw.end_fill()
 
+prelkj = "?"
+
 def render_gtcs_main():
-    global light, caccel, prereded, curspeed, acreqspd, spdlim, lastspdlim, accreq, gtcsinfo, sysinfo, thrust, eb, nextdist, curlkj
+    global prelkj, light, caccel, prereded, curspeed, acreqspd, spdlim, lastspdlim, accreq, gtcsinfo, sysinfo, thrust, eb, nextdist, curlkj
     #print("GTCS Renderer")
     acreqer.hideturtle()
     acreqer.goto(-160, 0)
@@ -411,6 +451,7 @@ def render_gtcs_main():
     if curlkj == "0" or curlkj == "00":
         if curlkj == "00" or prereded:
             lkj_draw("red")
+            start_sound("red")
         else:
             lkj_draw("red", "yellow")
     elif curlkj == "1":
@@ -438,6 +479,24 @@ def render_gtcs_main():
         lkjdraw.color('black')
     else:
         lkj_draw('white')
+    if prelkj != curlkj:
+        prelkj = curlkj
+        if curlkj == "0" or curlkj == "00":
+            if not (curlkj == "00" or prereded):
+                start_sound("red-yellow")
+        elif curlkj == "1":
+            start_sound("yellow")
+        elif curlkj in "<>":
+            start_sound("double-yellow")
+        elif curlkj == "2":
+            start_sound("green-yellow")
+        elif curlkj == "@":
+            start_sound("yellow2")
+        elif curlkj in "34567":
+            if curlkj == "3":
+                start_sound("green")
+            else:
+                start_sound("green" + str(int(curlkj) - 2))
     
     lkjdraw.penup()
     maxspder.right(maxspder.heading())
@@ -583,8 +642,10 @@ def physics():
                     power -= 10
             if schutz:
                 gtcsinfo.append(["Schutzbremsung", "red"])
+                start_sound("schutz")
             else:
                 gtcsinfo.append(["Zwangsbremsung", "red"])
+                start_sound("zb")
     if light[6]:
         gtcsinfo.append(["Magnet-brake", "blue"])
     
@@ -1008,10 +1069,12 @@ th = threading.Thread(target=console)
 t3 = threading.Thread(target=gtcs3)
 tl = threading.Thread(target=logclr)
 tb = threading.Thread(target=befread)
+tsh = threading.Thread(target=sound_thr)
 th.start()
 t3.start()
 tl.start()
 tb.start()
+tsh.start()
 turtle.mainloop()
 #print(turtle.heading())
 #input()
