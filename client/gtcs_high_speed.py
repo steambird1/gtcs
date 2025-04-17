@@ -597,6 +597,7 @@ def physics():
             #gtcsinfo.append(["Acceleration " + str(round(accreq,2)),"orange"])
             if accreq < -1.5:
                 gtcsinfo.append(["Deflect now", "orange"])
+                start_sound("deflect")
             light[2] = True
         if ((LEVEL >= 2) and curspeed > (cacreqspd + 3)) and (accreq < -2):
             contnz += 0.5
