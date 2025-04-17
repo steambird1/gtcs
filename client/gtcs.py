@@ -707,12 +707,13 @@ def locupd():
         update_loc(tloc)
 
 def schutz_cancel():
-    global schutz, on_keyboard
+    global schutz, on_keyboard, ps_queue
     if on_keyboard:
         keyboard_add('5')
         return
     schutz = False
     light[3] = False
+    ps_queue.clear()
 
 def locshow():
     global zugat, befehltext, on_keyboard
