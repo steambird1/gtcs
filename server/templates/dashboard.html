@@ -9,6 +9,9 @@
         .btn {
             padding-right: 10px;
         }
+		.canvas_cont {
+			overflow: visible;
+		}
     </style>
 	<script>
 	
@@ -21,7 +24,7 @@
 	    const scaleFactor = 1.1;
 	
 	    // Move before resize !!
-	    var MAP_MOVE_X = 220, MAP_MOVE_Y = 250, MAP_RESIZE_X = 1, MAP_RESIZE_Y = 1;
+	    var MAP_MOVE_X = 820, MAP_MOVE_Y = 250, MAP_RESIZE_X = 1, MAP_RESIZE_Y = 1;
 	
 	    function isdigit(x) {
 	        return /^\d+$/.test(x);
@@ -335,6 +338,7 @@
 
 		    canvas.addEventListener('mouseup', () => {
 			    isDragging = false;
+				systemRedraw();
 		    });
 
 		    canvas.addEventListener('wheel', (e) => {
@@ -429,8 +433,10 @@
 -->
 <a href="javascript:;" onclick="resetScale()">Reset Scale</a>
 <br />
-<canvas id="cvcont" width="800" height="600">
+<div class="canvas_cont">
+<canvas id="cvcont" width="3200" height="3200">
 
 </canvas>
+</div>
 </body>
 </html>
