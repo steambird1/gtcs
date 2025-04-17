@@ -44,13 +44,13 @@ def draw_line(name,fromx,fromy,tox,toy,margin):
     global sids, signals
     if name not in sids:
         sids[name] = 0
-    mx = margin# if (fromx < tox) else (-margin)
-    my = margin# if (fromy < toy) else (-margin)
+    mx = abs(margin)# if (fromx < tox) else (-margin)
+    my = abs(margin)# if (fromy < toy) else (-margin)
     #for x in range(fromx,tox,mx):
     #    for y in range(fromy,toy,my):
     x = fromx
     y = fromy
-    if (abs(toy-tox)%margin) > 0 or (abs(fromy-fromx)%margin) > 0:
+    if (abs(toy-tox)%mx) > 0 or (abs(fromy-fromx)%my) > 0:
         raise ValueError("May cause dead loop")
     #if (abs(toy-tox)//margin) != (abs(fromy-fromx)//margin):
     #    raise ValueError("Bad steps")
@@ -62,10 +62,14 @@ def draw_line(name,fromx,fromy,tox,toy,margin):
         if name+str(sids[name]-1) in signals:
             clst = [name+str(sids[name]-1)]
         signals[name+str(sids[name])] = [[x,y],[x+mx,y+my],GREEN,clst,0]
-        if x != tox:
+        if x < tox:
             x += mx
-        if y != toy:
+        elif x > tox:
+            x -= mx
+        if y < toy:
             y += my
+        elif y > toy:
+            y -= my
         print(x,y)
 
 def getlatest(name):
@@ -165,6 +169,20 @@ draw_line("V_dn",200,160,130,160,-5)
 signals["M_up_Quessw_ext"][3].append("V_up1")
 signals[getlatest("V_dn")][3].append("M_dn_Quessw_ent")
 signals[getlatest("V_dn")][4] = 1
+
+draw_line("F_up",-5,-205,-805,605,5)
+addstation("F_up", "Fountaine", -2, 0, 3, 0, "F_dn")
+draw_line("F_dn",-810,610,-805,605,-5)
+addstation("F_dn", "Fountaine", 2, 0, -3, 0, "F_up")
+draw_line("F_dn",-800,600,-5,-205,-5)
+signals["M_lyg_gleis3_ext"][3].append("F_up1")
+signals[getlatest("F_dn")][3].append("M_lyg_gleis3_ent")
+signals[getlatest("F_dn")][4] = 1
+
+for i in range(10,150,10):
+    signals["F_up"+str(i)][3].append("F_dn"+str(i))
+    signals["F_dn"+str(i)][3].append("F_up"+str(i))
+
 
 #signals = {"z0":[[-220,0],[180,0],GREEN,["z1"],0],"z1":[[-180,0],[80,0],GREEN,["z2","z3"],0],"z2":[[80,0],[180,0],GREEN,[],0],"z3":[[80,-60],[180,-80],GREEN,[],0]}
 visit = []
