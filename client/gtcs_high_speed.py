@@ -87,6 +87,7 @@ befehldisp = turtle.Turtle()
 xspdraw = turtle.Turtle()
 lkjdraw = turtle.Turtle()
 spdhint = turtle.Turtle()
+gaspress = turtle.Turtle()
 t = turtle.Pen()
 spdturtle.penup()
 thrturtle.penup()
@@ -108,6 +109,7 @@ befehldisp.goto(-160, 220)
 xspdraw.goto(-160,40)
 lkjdraw.goto(-200, 200)
 spdhint.goto(-155, 5)
+gaspress.goto(160,40)
 
 if DARK:
     turtle.bgcolor('black')
@@ -124,6 +126,7 @@ if DARK:
     xspdraw.pencolor('white')
     lkjdraw.pencolor('white')
     spdhint.pencolor('white')
+    gaspress.pencolor('white')
 
 xspdraw.speed('fastest')
 befehldisp.speed('fastest')
@@ -136,6 +139,7 @@ turtle2.speed('fastest')
 turtle3.speed('fastest')
 lkjdraw.speed('fastest')
 spdhint.speed('fastest')
+gaspress.speed('fastest')
 befehldisp.pensize(2)
 turtle2.pensize(2)
 turtle3.pensize(2)
@@ -164,6 +168,7 @@ thrturtle.hideturtle()
 maxspder.hideturtle()
 spdraw.hideturtle()
 lkjdraw.hideturtle()
+gaspress.hideturtle()
 
 if LEVEL < 3:
     limdraw.hideturtle()
@@ -359,6 +364,7 @@ prelkj = "?"
 def render_gtcs_main():
     global prelkj, light, caccel, prereded, curspeed, acreqspd, spdlim, lastspdlim, accreq, gtcsinfo, sysinfo, thrust, eb, nextdist, curlkj
     #print("GTCS Renderer")
+    gaspress.clear()
     acreqer.hideturtle()
     acreqer.goto(-160, 0)
     spdhint.clear()
@@ -432,6 +438,10 @@ def render_gtcs_main():
     #spdraw.
     spdraw.write(str(int(curspeed)),font=FONT)
     infobar.clear()
+    if thrust >= 0:
+        gaspress.write("600",font=FONT)
+    else:
+        gaspress.write(str(max(0, int(600+(power*5.8)))),font=FONT)
     # Generate info
     for i in gtcsinfo:
         if DARK and i[1] == "blue":
