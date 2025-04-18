@@ -294,8 +294,10 @@ signals[getlatest("F_dn")][3].append("M_lyg_gleis3_ent")
 signals[getlatest("F_dn")][4] = 1
 
 for i in range(10,150,10):
-    signals["F_up"+str(i)][3].append("F_dn"+str(i))
-    signals["F_dn"+str(i)][3].append("F_up"+str(i))
+    signals["F_up"+str(i)][3].append("F_dn"+str(sids["F_dn"]-i))
+    #sig_last_mod["F_up"+str(i)] = time.time()
+    signals["F_dn"+str(i)][3].append("F_up"+str(sids["F_up"]-i))
+    #sig_last_mod["F_dn"+str(i)] = time.time()
 
 #signals = {"z0":[[-220,0],[180,0],GREEN,["z1"],0],"z1":[[-180,0],[80,0],GREEN,["z2","z3"],0],"z2":[[80,0],[180,0],GREEN,[],0],"z3":[[80,-60],[180,-80],GREEN,[],0]}
 visit = []
