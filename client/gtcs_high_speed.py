@@ -411,9 +411,10 @@ def lkj_draw(col1,col2=""):
         lkjdraw.end_fill()
 
 prelkj = "?"
+gfailind = False
 
 def render_gtcs_main():
-    global prelkj, light, caccel, prereded, curspeed, acreqspd, spdlim, lastspdlim, accreq, gtcsinfo, sysinfo, thrust, eb, nextdist, curlkj
+    global gfailind, prelkj, light, caccel, prereded, curspeed, acreqspd, spdlim, lastspdlim, accreq, gtcsinfo, sysinfo, thrust, eb, nextdist, curlkj
     #print("GTCS Renderer")
     gaspress.clear()
     acreqer.hideturtle()
@@ -495,6 +496,12 @@ def render_gtcs_main():
         gpress = max(0, int(600+(power*5.6) - 5 + random.randint(0, 10)))
         if gpress > 600:
             gpress = 600
+        if gpress < 100:
+            if not gfailind:
+                gfailind = True
+                start_sound("braking")
+        else:
+            gfailind = False
         gaspress.write(str(gpress),font=FONT)
     # Generate info
     for i in failures:
@@ -1166,7 +1173,7 @@ def gtcs3():
         time.sleep(2)
 
 def logclr():
-    global GLOGGING, PLOGGING, g3err, plog, SCHUTZ_SIMU, SCHUTZ_PROB, failures
+    global GLOGGING, PLOGGING, g3err, plog, SCHUTZ_SIMU, SCHUTZ_PROB, failures, curspeed
 
     SCHUTZ_AFFAIR = ["Hilichurlwarnung", "Slimenwarnung", "Eisenbahnfaulwarnung", "Unerwartetelementwarnung", "Abyssmagewarnung"]
 
@@ -1183,6 +1190,8 @@ def logclr():
                     if rc == "Unerwartetelementwarnung":
                         rw = random.choice(["ovldr", "scond", "eblock"])
                         failures[rw][1] = True
+        if (curspeed > 15) and (maxthr_val() < 10):
+            start_sound("thrust")
         time.sleep(5)
         
         
