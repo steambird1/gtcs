@@ -27,6 +27,8 @@ SCHUTZ_SIMU=True
 SCHUTZ_PROB=1
 DARK=True
 
+MYGREEN=("green2" if DARK else "green")
+
 # GTCS data collector
 nextdist=0
 curspeed=0
@@ -43,6 +45,54 @@ curlkj="?"
 prereded=False
 schutz=False
 schutz_info=""
+
+# Superconduct is not a failure sometimes, depending on what you need.
+# Volts High == Charged sometimes
+apress=0
+evolts=0
+eamps=0
+efreq=50
+
+# 'a' or 'e'
+cpsrc="a"
+# 'x' for empty page
+syspages = {
+    "q":[
+        [lambda: ("Anemo" if (cpsrc == "a") else "Electro"), lambda: ("white" if DARK else "black")]
+    ],
+    "w":[
+        [lambda: ("Anemo" if (cpsrc == "a") else "Electro"), lambda: ("white" if DARK else "black")],
+        [lambda: ("{} MPa".format(round(apress,1))), lambda: ("red" if (((cpsrc == "a") and (apress < 10)) or apress > 200) else MYGREEN)]
+    ],
+    "e":[
+        [lambda: ("Anemo" if (cpsrc == "a") else "Electro"), lambda: ("white" if DARK else "black")],
+        [lambda: ("{} V".format(round(evolts,1))), lambda: ("red" if (((cpsrc == "e") and (evolts < 10)) or evolts > 3000) else MYGREEN)],
+        [lambda: ("{} A".format(round(eamps,1))), lambda: ("red" if (((cpsrc == "e") and (eamps < 0.1)) or eamps > 100) else MYGREEN)]
+    ],
+    "x":[]
+}
+csyspage = "q"
+
+failures = {
+    "thr":["Thrust No Response", False, lambda: False],
+    "brk":["Brake No Response", False, lambda: False],
+    "apwrlo":["Anemo Quality Low", False, lambda: ((cpsrc == "a") and (apress < 10))],
+    "apwrhi":["Anemo Quality High", False, lambda: apress > 200],
+    "epwrlo":["Electro Volts Low", False, lambda: ((cpsrc == "e") and (evolts < 10))],
+    "epwrhi":["Electro Volts High", False, lambda: evolts > 3000],
+    "epwrslo":["Electro Amps Low", False, lambda: ((cpsrc == "e") and (eamps < 0.1))],
+    "epwrshi":["Electro Amps High", False, lambda: eamps > 100],
+    "ovldr":["Element Overload", False, lambda: False],
+    "scond":["Element Superconduct", False, lambda: False],
+    "eblock":["Crystalize Blocking", False, lambda: False]
+}
+
+def maxthr_val():
+    global apress, evolts, eamps, cpsrc
+    if cpsrc == "a":
+        return apress*1.5
+    else:
+        return (evolts*eamps)/250
 
 ps_queue=deque()
 
@@ -101,14 +151,15 @@ befehldisp.penup()
 xspdraw.penup()
 lkjdraw.penup()
 spdhint.penup()
+gaspress.penup()
 maxspder.goto(-160, 80)
 acreqer.goto(-160, 0)
+spdhint.goto(-155, 5)
 spdraw.goto(-160, 80)
 limdraw.goto(-320, 0)
 befehldisp.goto(-160, 220)
 xspdraw.goto(-160,40)
 lkjdraw.goto(-200, 200)
-spdhint.goto(-155, 5)
 gaspress.goto(160,40)
 
 if DARK:
@@ -441,8 +492,14 @@ def render_gtcs_main():
     if thrust >= 0:
         gaspress.write("600",font=FONT)
     else:
-        gaspress.write(str(max(0, int(600+(power*5.8)))),font=FONT)
+        gpress = max(0, int(600+(power*5.6) - 5 + random.randint(0, 10)))
+        if gpress > 600:
+            gpress = 600
+        gaspress.write(str(gpress),font=FONT)
     # Generate info
+    for i in failures:
+        if failures[i][1] or (failures[i][2]()):
+            gtcsinfo.append([failures[i][0], "maroon1"])
     for i in gtcsinfo:
         if DARK and i[1] == "blue":
             i[1] = "cyan"
@@ -565,6 +622,7 @@ def physics():
         thrust = power / 2
     else:
         thrust = power / (curspeed / 10)
+    thrust -= 10
     accuer += (curspeed / 3.6) * 0.2
     caccel = thrust / 50
     curspeed += thrust / 50
@@ -772,7 +830,67 @@ t.screen.onkey(locshow, '6')
 t.screen.onkey(schutz_cancel, '5')
 t.screen.onkey(change_loc, '4')
 
-for i in '0123qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM':
+
+def wind_charge():
+    global apress, on_keyboard
+    if on_keyboard:
+        keyboard_add('o')
+        return
+    apress += random.randint(50,150)/10
+
+def wind_release():
+    global apress, on_keyboard
+    if on_keyboard:
+        keyboard_add('p')
+        return
+    apress -= random.randint(50,150)/10
+    if apress < 0:
+        apress = 0
+
+def elec_charge():
+    global eamps, evolts, on_keyboard
+    if on_keyboard:
+        keyboard_add('k')
+        return
+    evolts += random.randint(10,30)
+    eamps += random.randint(10,30)/20
+
+def elec_release():
+    global eamps, evolts, on_keyboard
+    if on_keyboard:
+        keyboard_add('l')
+        return
+    evolts -= random.randint(10,30)
+    eamps -= random.randint(10,30)/20
+    if evolts < 0:
+        evolts = 0
+    if eamps < 0:
+        eamps = 0
+        
+def swtc_pwr():
+    global cpsrc, on_keyboard
+    if on_keyboard:
+        keyboard_add('a')
+        return
+    if cpsrc == "a":
+        cpsrc = "e"
+    else:
+        cpsrc = "a"
+
+t.screen.onkey(wind_charge, 'o')
+t.screen.onkey(wind_release, 'p')
+t.screen.onkey(elec_charge, 'k')
+t.screen.onkey(elec_release, 'l')
+t.screen.onkey(swtc_pwr, 'a')
+
+def syspage_switch(ckey):
+    global csyspage
+    csyspage = ckey
+
+for i in syspages:
+    t.screen.onkey(eval("lambda: syspage_switch('{}')".format(i)), i)
+
+for i in '0123rtyuisdfghjzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM':
     t.screen.onkey(eval("lambda: keyboard_add('{}')".format(i)), i)
 
 t.screen.onkey(lambda: keyboard_add('_'), ',')
@@ -874,7 +992,7 @@ def schutz_broadcast(info):
 
 
 def console():
-    global SCHUTZ_PROB, SCHUTZ_SIMU, SCTR, ZCTR, DCTR, BCTR, LCTR, GLOGGING, PLOGGING, plog, ZUGNAME, spdlim, zugat, gtcsinfo, accreq, acreqspd, thrust, accuer, LEVEL, g3err, autog3
+    global SCHUTZ_PROB, SCHUTZ_SIMU, SCTR, ZCTR, DCTR, BCTR, LCTR, GLOGGING, PLOGGING, plog, ZUGNAME, spdlim, zugat, gtcsinfo, accreq, acreqspd, thrust, accuer, LEVEL, g3err, autog3, failures
     while True:
         ip = input(">>> ")
         cmd = ip.split(" ")
@@ -912,6 +1030,8 @@ def console():
                 print(accuer)
             elif cmd[1] == "5":
                 print(curlkj)
+            elif cmd[1] == "6":
+                print(maxthr_val())
         elif cmd[0] == "glog":
             print("Currently GTCS",LEVEL)
             print("\n".join(g3err))
@@ -961,6 +1081,17 @@ def console():
                     print("Schutz probability is now",SCHUTZ_PROB)
                 else:
                     schutz_broadcast(cmd[1])
+        elif cmd[0] == "failmgmt":
+            if len(cmd) < 2:
+                for i in failures:
+                    failures[i][1] = False
+                print("All failures cleared")
+            else:
+                try:
+                    failures[cmd[1]][1] = not failures[cmd[1]][1]
+                    print("Failure item '{}' is configured to".format(failures[cmd[1]][0]),failures[cmd[1]][1])
+                except Exception as e:
+                    print("Unable to configure",e)
         else:
             print("Invalid command")
 
@@ -1035,7 +1166,7 @@ def gtcs3():
         time.sleep(2)
 
 def logclr():
-    global GLOGGING, PLOGGING, g3err, plog, SCHUTZ_SIMU, SCHUTZ_PROB
+    global GLOGGING, PLOGGING, g3err, plog, SCHUTZ_SIMU, SCHUTZ_PROB, failures
 
     SCHUTZ_AFFAIR = ["Hilichurlwarnung", "Slimenwarnung", "Eisenbahnfaulwarnung", "Unerwartetelementwarnung", "Abyssmagewarnung"]
 
@@ -1046,8 +1177,12 @@ def logclr():
             plog = []
         if SCHUTZ_SIMU:
             if not schutz:
-                if random.randint(0, 100) < SCHUTZ_PROB:
-                    schutz_broadcast(random.choice(SCHUTZ_AFFAIR))
+                if random.randint(0, 1000) < SCHUTZ_PROB:
+                    rc = random.choice(SCHUTZ_AFFAIR)
+                    schutz_broadcast(rc)
+                    if rc == "Unerwartetelementwarnung":
+                        rw = random.choice(["ovldr", "scond", "eblock"])
+                        failures[rw][1] = True
         time.sleep(5)
         
         
@@ -1073,6 +1208,55 @@ def befread():
             g3err.append(time.ctime() + " GTCS Befehl: " + str(e))
         time.sleep(2)
 
+def gsmgmt():
+    global failures, power, SCHUTZ_PROB, apress, evolts, eamps, efreq, sysinfo, syspages, csyspage
+    while True:
+        if random.randint(0, 35000) < SCHUTZ_PROB:
+            rf = random.choice(list(failures))
+            failures[rf][1] = not failures[rf][1]
+        # Failure effects
+        if failures["thr"][1]:
+            if power > 0:
+                power -= min(power, 5)
+        if failures["brk"][1]:
+            if power < 0:
+                power += min(-power, 5)
+        if failures["apwrlo"][1]:
+            if apress > 10:
+                apress -= random.randint(10,40)/10
+        if failures["apwrhi"][1]:
+            if apress < 200:
+                apress += random.randint(10,40)/10
+        if failures["epwrlo"][1] or failures["eblock"][1]:
+            if evolts > 10:
+                evolts -= random.randint(10,40)/10
+        if failures["epwrhi"][1] or failures["ovldr"][1]:
+            if evolts < 3000:
+                evolts += random.randint(10,40)/10
+        if failures["epwrslo"][1] or failures["eblock"][1]:
+            if eamps > 0.1:
+                eamps -= random.randint(10,40)/10
+        if failures["epwrshi"][1] or failures["scond"][1]:
+            if eamps < 100:
+                eamps += random.randint(10,40)/20
+        sysinfo = []
+        for i in syspages[csyspage]:
+            sysinfo.append([i[0](), i[1]()])
+        apress += (random.randint(0,10)-5)/10
+        evolts += (random.randint(0,10)-5)/10
+        eamps += (random.randint(0,10)-5)/50
+        if apress < 0:
+            apress = 0
+        if evolts < 0:
+            evolts = 0
+        if eamps < 0:
+            eamps = 0
+        pmc = maxthr_val()
+        if power > pmc:
+            power -= min(power-pmc, random.randint(10,30))
+        #power = min(power, maxthr_val())
+        time.sleep(0.1)
+
 #turtle.right(90)
 render_gtcs()
 turtle.ontimer(render_gtcs_main, 100)
@@ -1082,11 +1266,13 @@ t3 = threading.Thread(target=gtcs3)
 tl = threading.Thread(target=logclr)
 tb = threading.Thread(target=befread)
 tsh = threading.Thread(target=sound_thr)
+tgs = threading.Thread(target=gsmgmt)
 th.start()
 t3.start()
 tl.start()
 tb.start()
 tsh.start()
+tgs.start()
 turtle.mainloop()
 #print(turtle.heading())
 #input()
