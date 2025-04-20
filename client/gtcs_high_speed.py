@@ -891,7 +891,10 @@ t.screen.onkey(elec_release, 'l')
 t.screen.onkey(swtc_pwr, 'a')
 
 def syspage_switch(ckey):
-    global csyspage
+    global csyspage, on_keyboard
+    if on_keyboard:
+        keyboard_add(ckey)
+        return
     csyspage = ckey
 
 for i in syspages:
