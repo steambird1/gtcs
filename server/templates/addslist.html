@@ -1,0 +1,77 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+	<title>Fountaine MTR Dashboard</title>
+	<style>
+	table,thead,tbody,th,tr,td {
+		border: 1px solid;
+	}
+	</style>
+	<script>
+		function proceed(name) {
+			var da = document.getElementById('cpwd');
+			var dt = document.getElementById('dist_sub_' + name);
+			var dd = document.getElementById('data_sub_' + name);
+			var xhr = new XMLHttpRequest();
+			xhr.open('GET', '/addataupdate?auth=' + da.value + '&sid=' + name + '&dis=' + dt.value + '&stat=' + encodeURIComponent(dd.value));
+			xhr.send(null);
+			xhr.onreadystatechange = function() {
+				if (xhr.readyState == 4) {
+					alert(xhr.responseText);
+					location.reload(true);
+				}
+			}
+		}
+		function proceed_r(name, dis) {
+			var da = document.getElementById('cpwd');
+			var xhr = new XMLHttpRequest();
+			xhr.open('GET', '/addataupdate?auth=' + da.value + '&sid=' + name + '&dis=' + dis + '&stat=x');
+			xhr.send(null);
+			xhr.onreadystatechange = function() {
+				if (xhr.readyState == 4) {
+					alert(xhr.responseText);
+					if (xhr.status == 200) {
+						location.reload(true);
+					}
+				}
+			}
+		}
+	</script>
+</head>
+<body>
+	<span>Operation password:</span>
+	<input type="password" id="cpwd" />
+	<br />
+	<table>
+		<thead>
+			<tr>
+				<th>Signal</th>
+				<th>Position</th>
+				<th>Info</th>
+				<th>Operation</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% for i in addinfos %}
+			<tr>
+				<td>{{ i }}</td>
+				<td colspan="3">Distance: 
+					<input type="text" id="dist_sub_{{ i }}" />
+				&nbsp;&nbsp;Data:
+					<input type="text" id="data_sub_{{ i }}" />
+					<button onclick="proceed('{{ i }}');">Update</button>
+				</td>
+			</tr>
+			{% for j in addinfos[i] %}
+			<tr>
+				<td></td>
+				<td>{{ str(j[0]) }}</td>
+				<td>{{ j[1] }}</td>
+				<td><button onclick="proceed_r('{{ i }}',{{ str(j[0]) }});">Remove</button></td>
+			</tr>
+			{% endfor %}
+			{% endfor %}
+		</tbody>
+	</table>
+</body>
+</html>
