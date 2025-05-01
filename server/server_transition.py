@@ -7,6 +7,7 @@ import hashlib
 from PIL import Image
 from urllib.request import urlopen
 import urllib
+import urllib
 import json
 
 URLSRC = "http://tinywebdb.appinventor.space/api"
@@ -67,12 +68,26 @@ app = Flask("FountaineMTR-Comp")
 RED = "0"
 GREEN = "."
 WARNING = "/"
+PREWARNING = "|"
 ERROR = "?"
 
 ZOOM = 250
+SEED = 616
+SEED2 = 12312345
+SEED3 = 45645612
+SEED4 = 11451419198
+
+# To generate terrains.
+# [lower, upper)
+def randz(lower, upper):
+    global SEED
+    res = (SEED * SEED2 + SEED3) % SEED4
+    SEED = res
+    return res%(upper-lower)+lower
 
 # KLine graph
 signals = {}
+addinfos = {}
 # Last modify?
 sig_last_mod = {}
 #for i in range(10):
@@ -137,7 +152,10 @@ def sig_update():
 def getmd5(s):
     return hashlib.md5(s.encode('utf-8')).hexdigest()
 
-AUTH_FREE = True
+def length(i):
+    return ((signals[i][0][0]-signals[i][1][0])**2 + (signals[i][0][1]-signals[i][1][1])**2)**0.5
+
+AUTH_FREE = False
 TRAIN_AUTH = [getmd5("jeangunnhildr"), getmd5("_~_amber~_~")]
 CTRL_AUTH = [getmd5("no_klee_here_!")]
 BEFEHL_AUTH = [getmd5("barbatos'_wish^)")]
@@ -284,6 +302,33 @@ signals["M_up_Quessw_ext"][3].append("V_up1")
 signals[getlatest("V_dn")][3].append("M_dn_Quessw_ent")
 signals[getlatest("V_dn")][4] = 1
 
+def generate_for(name):
+    global sids, addinfos, ZOOM
+    for i in range(1, sids[name]):
+        cdis = 0
+        sname = name + str(i)
+        if sname not in addinfos:
+            addinfos[sname] = []
+        lz = int(length(sname)*ZOOM)
+        while cdis <= lz:
+            cst = randz(0, 100)
+            if cst <= 2:
+                addinfos[sname].append([cdis, "P0"])
+                cdis += randz(100, 200)
+                cdis = min(cdis, lz)
+                addinfos[sname].append([cdis, "P1"])
+            elif cst <= 8:
+                addinfos[sname].append([cdis, "La " + str(randz(0,5)*10) + " " + str(randz(10,20)*10)])
+                cdis += randz(500, 1500)
+                cdis = min(cdis, lz)
+                addinfos[sname].append([cdis, "Le"])
+            cdis += randz(100, 1000)
+
+generate_for("M_up")
+generate_for("M_dn")
+generate_for("V_up")
+generate_for("V_dn")
+
 draw_line("F_up",-5,-205,-805,605,5)
 addstation("F_up", "Fountaine", -2, 0, 3, 0, "F_dn")
 draw_line("F_dn",-810,610,-805,605,-5)
@@ -298,6 +343,11 @@ for i in range(10,150,10):
     #sig_last_mod["F_up"+str(i)] = time.time()
     signals["F_dn"+str(i)][3].append("F_up"+str(sids["F_up"]-i))
     #sig_last_mod["F_dn"+str(i)] = time.time()
+
+
+# Current for debug:
+# La [lower] [upper] - speed limit start; Le - speed limit clear; T [text] - texture information; S [name] [stat] - signal
+# P0 - neutral area; P1 - repowering
 
 #signals = {"z0":[[-220,0],[180,0],GREEN,["z1"],0],"z1":[[-180,0],[80,0],GREEN,["z2","z3"],0],"z2":[[80,0],[180,0],GREEN,[],0],"z3":[[80,-60],[180,-80],GREEN,[],0]}
 visit = []
@@ -360,8 +410,66 @@ def signal():
         return RED
     return signals[sname][2]
 
-def length(i):
-    return ((signals[i][0][0]-signals[i][1][0])**2 + (signals[i][0][1]-signals[i][1][1])**2)**0.5
+# addinfos is a list: [dist to signal, info str]
+# Supporting: permanent speed suggestions and text indications
+# offset allowed.
+NORMREFDIST = 4500
+
+def sdscan(sname,cdist=0,refdist=4500):
+    global addinfos, signals, ZOOM
+    if refdist < 0:
+        return []
+    ctmp = []
+    if sname in addinfos:
+        for i in addinfos[sname]:
+            ctmp.append([str(int(i[0]+cdist)),i[1]])
+    cl = length(sname) * ZOOM
+    if signals[sname][4] < len(signals[sname][3]):
+        sgt = signals[sname][3][signals[sname][4]]
+        ctmp.append([str(int(cdist+cl)), "S " + sgt + " " + str(signals[sgt][2])])
+        ctmp += sdscan(sgt, cdist + cl, refdist - cl)
+    return ctmp
+
+@app.route("/signaldata")
+def signaldata():
+    global addinfos, signals, NORMREFDIST, ZOOM
+    sname = request.args.get("sid")
+    sdev = int(request.args.get("dev"))
+    if sname not in signals:
+        return "?"
+    rsc = sdscan(sname,-sdev,NORMREFDIST+sdev)
+    res = str(int(length(sname)*ZOOM)-sdev) + "\n" + "\n".join([" ".join(i) for i in rsc])
+    return res
+
+@app.route("/addataupdate")
+def addataupdate():
+    global signals, CTRL_AUTH, addinfos
+    if not check_auth(request.args.get("auth"), CTRL_AUTH):
+        return "Operation not permitted", 403
+    try:
+        sname = request.args.get("sid")
+        if sname not in signals:
+            return "Invalid parameter", 400
+        sdis = request.args.get("dis")
+        stgt = urllib.parse.unquote(request.args.get("stat"))
+        if stgt == "x":
+            for i in range(len(addinfos[sname])):
+                if addinfos[sname][i][0] == int(sdis):
+                    addinfos[sname].pop(i)
+                    break
+            else:
+                return "Element not found", 400
+            return "Removal completed successfully"
+        else:
+            for i in range(len(addinfos[sname])):
+                if addinfos[sname][i][0] > int(sdis):
+                    addinfos[sname].insert(i, [int(sdis), stgt])
+                    break
+            else:
+                addinfos[sname].append([int(sdis), stgt])
+            return "Operation completed successfully"
+    except Exception as e:
+        return "Internal server error: " + str(e), 500
 
 @app.route("/signalist")
 def signalist():
@@ -394,6 +502,11 @@ def prettyhtml(s):
 def signaldisp():
     global signals
     return render_template("signalist.html", signals=signals, prettyhtml=prettyhtml, len=len)
+
+@app.route("/signaladdisp")
+def signaladdisp():
+    global addinfos
+    return render_template("addslist.html", addinfos=addinfos, str=str)
 
 zscanned = []
 
@@ -587,9 +700,15 @@ def zug():
         report_signal_mod(sname)
         zugin[sname] = zugid
         if sname in prev:
-            originals[prev[sname]] = signals[prev[sname]][2]
-            signals[prev[sname]][2] = WARNING
-            report_signal_mod(prev[sname])
+            ps = prev[sname]
+            originals[ps] = signals[ps][2]
+            signals[ps][2] = WARNING
+            report_signal_mod(ps)
+            if ps in prev:
+                pps = prev[ps]
+                originals[pps] = signals[pps][2]
+                signals[pps][2] = PREWARNING
+                report_signal_mod(pps)
         return RED
     elif state == "1":
         if zugin[sname] != zugid:
@@ -598,9 +717,15 @@ def zug():
         if sname in originals:
             signals[sname][2] = originals[sname]
         if sname in prev:
-            if prev[sname] in originals:
-                signals[prev[sname]][2] = originals[prev[sname]]
-                report_signal_mod(prev[sname])
+            ps = prev[sname]
+            if ps in originals:
+                signals[ps][2] = originals[ps]
+                report_signal_mod(ps)
+                if ps in prev:
+                    pps = prev[ps]
+                    if pps in originals:
+                        signals[pps][2] = originals[pps]
+                        report_signal_mod(pps)
         report_signal_mod(sname)
         zugin[sname] = ""
         return signals[sname][2]
@@ -766,6 +891,10 @@ if __name__ == '__main__':
     for i in signals:
         scan_signal(i)
         break
+    for i in signals:
+        if i not in addinfos:
+            #print("Addinfo assist",i)
+            addinfos[i] = []
     print("""
 **************************************************
 You are running a TinyWebDB-compatible server.
