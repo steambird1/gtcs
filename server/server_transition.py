@@ -244,7 +244,12 @@ draw_line("M_up",0,-205,0,-200,5)
 signals["M_upt_lyg"] = [[0, -200], [-5, -195], RED, ["M_up3", "M_dnt_lyg"], 0]
 signals["M_dnt_lyg"] = [[-10, -190], [-5, -195], RED, ["M_dn80", "M_lyg_gleis3_ent", "M_upt_lyg"], 0]
 signals["M_lyg_gleis3_ent"] = [[-5, -195], [-5, -200], GREEN, ["M_lyg_gleis3_ext", "M_dnt_lyg"], 0]
-signals["M_lyg_gleis3_ext"] = [[-5, -200], [-5, -205], RED, ["M_lyg_gleis3_ent"], 0]
+signals["M_lyg_gleis3_ext"] = [[-5, -200], [-5, -205], RED, ["M_lyg_gleis3_ent", "M_lyg_gleis4_ent"], 0]
+signals["M_lyg_gleis4_ent"] = [[-5, -205], [-5, -210], GREEN, ["M_lyg_gleis4_ext", "M_lyg_gleis3_ext"], 0]
+signals["M_lyg_gleis4_ext"] = [[-5, -210], [-5, -215], RED, ["M_lyg_gleis4_ent", "M_lyg_gleis3_ent", "S_up1"], 2]
+
+report_signal_mod("M_lyg_gleis3_ent")
+report_signal_mod("M_lyg_gleis3_ext")
 
 addstation("M_up","lyg",0,2,0,3,"M_dn")
 #report_line()
@@ -302,7 +307,24 @@ signals["M_up_Quessw_ext"][3].append("V_up1")
 signals[getlatest("V_dn")][3].append("M_dn_Quessw_ent")
 signals[getlatest("V_dn")][4] = 1
 
-def generate_for(name):
+draw_line("S_up",-5,-205,-50,-250,-5)
+addstation("S_up", "Chasm", -2, -2, -3, -3, "S_dn")
+draw_line("S_up",-55,-260,-155,-260,-5)
+addstation("S_up", "Sumeru", -2, 0, -3, 0, "S_dn")
+draw_line("S_dn",-160,-265,-155,-260,5)
+addstation("S_dn", "Sumeru", 2, 0, 3, 0, "S_up")
+draw_line("S_dn",-155,-255,-55,-255,5)
+addstation("S_dn", "Chasm", 2, 2, 3, 3, "S_up")
+draw_line("S_dn",-50,-250,-5,-205,5)
+#for i in range(1,sids["S_up"]+1):
+#    report_signal_mod("S_up"+str(i))
+#for i in range(1,sids["S_dn"]+1):
+#    report_signal_mod("S_dn"+str(i))
+
+signals[getlatest("S_dn")][3].append("M_lyg_gleis3_ent")
+signals[getlatest("S_dn")][4] = 1
+
+def generate_for(name,c1=2,c2=8,mnspd=10,mxspd=20):
     global sids, addinfos, ZOOM
     for i in range(1, sids[name]):
         cdis = 0
@@ -312,13 +334,13 @@ def generate_for(name):
         lz = int(length(sname)*ZOOM)
         while cdis <= lz:
             cst = randz(0, 100)
-            if cst <= 2:
+            if cst <= c1:
                 addinfos[sname].append([cdis, "P0"])
                 cdis += randz(100, 200)
                 cdis = min(cdis, lz)
                 addinfos[sname].append([cdis, "P1"])
-            elif cst <= 8:
-                addinfos[sname].append([cdis, "La " + str(randz(0,5)*10) + " " + str(randz(10,20)*10)])
+            elif cst <= c2:
+                addinfos[sname].append([cdis, "La " + str(randz(0,5)*10) + " " + str(randz(mnspd,mxspd)*10)])
                 cdis += randz(500, 1500)
                 cdis = min(cdis, lz)
                 addinfos[sname].append([cdis, "Le"])
@@ -328,6 +350,8 @@ generate_for("M_up")
 generate_for("M_dn")
 generate_for("V_up")
 generate_for("V_dn")
+generate_for("S_up",8,20,6,15)
+generate_for("S_dn",8,20,6,15)
 
 draw_line("F_up",-5,-205,-805,605,5)
 addstation("F_up", "Fountaine", -2, 0, 3, 0, "F_dn")
