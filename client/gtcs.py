@@ -1375,7 +1375,7 @@ def gtcs3():
                                     sd = dis
                                     spdlim = cslim
                         elif csp[1] == "La":
-                            if dis < last_fcancel:
+                            if (dis < last_fcancel) and (dis > 0):
                                 cac = accelreq(int(csp[3]), dis)
                                 if cac < raw:
                                     raw = cac
