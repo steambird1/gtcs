@@ -13,42 +13,43 @@ except:
     VENTI = False
     print("Unable to load Venti. Running without voice!")
 
-AUTH="_~_amber~_~"
+AUTH = "_~_amber~_~"
 
-FONT=('Arial', 10, 'normal')
-LEVEL=1
-SCTR="http://127.0.0.1:5033/signal"
-ZCTR="http://127.0.0.1:5033/zug"
-DCTR="http://127.0.0.1:5033/zugdist"
-BCTR="http://127.0.0.1:5033/befehl"
-LCTR="http://127.0.0.1:5033/lkjdisp"
-ICTR="http://127.0.0.1:5033/signaldata"
-ZUGNAME="ice1"
-SCHUTZ_SIMU=True
-SCHUTZ_PROB=1
-DARK=True
-DRANGE=4000
+FONT = ('Arial', 10, 'normal')
+LEVEL = 1
+SCTR = "http://127.0.0.1:5033/signal"
+ZCTR = "http://127.0.0.1:5033/zug"
+DCTR = "http://127.0.0.1:5033/zugdist"
+BCTR = "http://127.0.0.1:5033/befehl"
+LCTR = "http://127.0.0.1:5033/lkjdisp"
+ICTR = "http://127.0.0.1:5033/signaldata"
+ZUGNAME = "ice1"
+SCHUTZ_SIMU = True
+SCHUTZ_PROB = 1
+DARK = True
+DRANGE = 4000
 
-MYGREEN=("green2" if DARK else "green")
-MYWHITE=("white" if DARK else "black")
-MYBLUE=("cyan" if DARK else "blue")
+MYGREEN = ("green2" if DARK else "green")
+MYWHITE = ("white" if DARK else "black")
+MYBLUE = ("cyan" if DARK else "blue")
 
 # GTCS data collector
-nextdist=0
-curspeed=0
-spdlim=40
-lastspdlim=240
-accreq=0
-gtcsinfo=[]
-sysinfo=[]
-thrust=0
-eb=False
-zugat=""
-power=0
-curlkj="?"
-prereded=False
-schutz=False
-schutz_info=""
+nextdist = 0
+curspeed = 0
+spdlim = 40
+lastspdlim = 240
+accreq = 0
+gtcsinfo = []
+sysinfo = []
+thrust = 0
+eb = False
+zugat = ""
+power = 0
+curlkj = "?"
+prereded = False
+schutz = False
+schutz_info = ""
+has_afb = False
 
 extcmd = []
 lastseg = []
@@ -56,67 +57,77 @@ furseg = []
 lbdisp = 0
 zusatz_lastspdlim = 300
 
-show_name=False
+show_name = False
 
 # Whether to pass neutral zone
-passdz=False
+passdz = False
+appdz = False
 
 # Superconduct is not a failure sometimes, depending on what you need.
 # Volts High == Charged sometimes
-apress=0
-evolts=0
-eamps=0
-efreq=50
+apress = 0
+evolts = 0
+eamps = 0
+efreq = 50
 
 # 'a' or 'e'
-cpsrc="a"
-cptype={"a":"Anemo","e":"Electro","p":"Pantograph"}
+cpsrc = "a"
+cptype = {"a": "Anemo", "e": "Electro", "p": "Pantograph"}
 # 'x' for empty page
 syspages = {
-    "q":[
+    "q": [
         [lambda: cptype[cpsrc], lambda: MYWHITE]
     ],
-    "w":[
+    "w": [
         [lambda: cptype[cpsrc], lambda: MYWHITE],
-        [lambda: ("{} MPa".format(round(apress,1))), lambda: ("red" if (((cpsrc == "a") and (apress < 10)) or apress > 200) else MYGREEN)]
+        [lambda: ("{} MPa".format(round(apress, 1))),
+         lambda: ("red" if (((cpsrc == "a") and (apress < 10)) or apress > 200) else MYGREEN)]
     ],
-    "e":[
+    "e": [
         [lambda: cptype[cpsrc], lambda: MYWHITE],
-        [lambda: ("{} V".format(round(evolts,1))), lambda: ("red" if (((cpsrc == "e") and (evolts < 10)) or evolts > 3000) else MYGREEN)],
-        [lambda: ("{} A".format(round(eamps,1))), lambda: ("red" if (((cpsrc == "e") and (eamps < 0.1)) or eamps > 100) else MYGREEN)]
+        [lambda: ("{} V".format(round(evolts, 1))),
+         lambda: ("red" if (((cpsrc == "e") and (evolts < 10)) or evolts > 3000) else MYGREEN)],
+        [lambda: ("{} A".format(round(eamps, 1))),
+         lambda: ("red" if (((cpsrc == "e") and (eamps < 0.1)) or eamps > 100) else MYGREEN)]
     ],
-    "r":[
+    "r": [
         [lambda: cptype[cpsrc], lambda: MYWHITE],
         [lambda: ("Neutral Section" if passdz else "Normal"), lambda: ("orange" if passdz else MYWHITE)],
-        [lambda: ("{} V".format(round(evolts,1))), lambda: ("red" if (((cpsrc == "e") and (evolts < 10)) or evolts > 3000) else MYGREEN)],
-        [lambda: ("{} A".format(round(eamps,1))), lambda: ("red" if (((cpsrc == "e") and (eamps < 0.1)) or eamps > 100) else MYGREEN)]
+        [lambda: ("{} V".format(round(evolts, 1))),
+         lambda: ("red" if (((cpsrc == "e") and (evolts < 10)) or evolts > 3000) else MYGREEN)],
+        [lambda: ("{} A".format(round(eamps, 1))),
+         lambda: ("red" if (((cpsrc == "e") and (eamps < 0.1)) or eamps > 100) else MYGREEN)]
     ],
-    "x":[]
+    "x": []
 }
 csyspage = "q"
 
 failures = {
-    "thr":["Thrust No Response", False, lambda: False],
-    "brk":["Brake No Response", False, lambda: False],
-    "apwrlo":["Anemo Quality Low", False, lambda: ((cpsrc == "a") and (apress < 10))],
-    "apwrhi":["Anemo Quality High", False, lambda: apress > 200],
-    "epwrlo":["Electro Volts Low", False, lambda: ((cpsrc == "e") and (evolts < 10))],
-    "epwrhi":["Electro Volts High", False, lambda: evolts > 3000],
-    "epwrslo":["Electro Amps Low", False, lambda: ((cpsrc == "e") and (eamps < 0.1))],
-    "epwrshi":["Electro Amps High", False, lambda: eamps > 100],
-    "ovldr":["Element Overload", False, lambda: False],
-    "scond":["Element Superconduct", False, lambda: False],
-    "eblock":["Crystalize Blocking", False, lambda: False]
+    "thr": ["Thrust No Response", False, lambda: False],
+    "brk": ["Brake No Response", False, lambda: False],
+    "apwrlo": ["Anemo Quality Low", False, lambda: ((cpsrc == "a") and (apress < 10))],
+    "apwrhi": ["Anemo Quality High", False, lambda: apress > 200],
+    "epwrlo": ["Electro Volts Low", False, lambda: ((cpsrc == "e") and (evolts < 10))],
+    "epwrhi": ["Electro Volts High", False, lambda: evolts > 3000],
+    "epwrslo": ["Electro Amps Low", False, lambda: ((cpsrc == "e") and (eamps < 0.1))],
+    "epwrshi": ["Electro Amps High", False, lambda: eamps > 100],
+    "ovldr": ["Element Overload", False, lambda: False],
+    "scond": ["Element Superconduct", False, lambda: False],
+    "eblock": ["Crystalize Blocking", False, lambda: False],
+    "logerr": ["Recorder Failure", False, lambda: False]
 }
+
 
 def maxthr_val():
     global apress, evolts, eamps, cpsrc
     if cpsrc == "a":
-        return apress*1.5
+        return apress * 1.5
     else:
-        return (evolts*eamps)/250
+        return (evolts * eamps) / 250
 
-ps_queue=deque()
+
+ps_queue = deque()
+
 
 def start_sound(name):
     global VENTI, ps_queue
@@ -127,6 +138,7 @@ def start_sound(name):
             if cr == name:
                 return
         ps_queue.append(name)
+
 
 def sound_thr():
     global VENTI, ps_queue
@@ -143,6 +155,7 @@ def sound_thr():
                 except:
                     pass
         time.sleep(1)
+
 
 turtle.tracer(False)
 
@@ -176,7 +189,7 @@ if DARK:
     spdraw.pencolor('white')
     befehldisp.pencolor('white')
     xspdraw.pencolor('white')
-    #lkjdraw.pencolor('white')
+    # lkjdraw.pencolor('white')
     spdhint.pencolor('white')
     gaspress.pencolor('white')
 
@@ -200,9 +213,9 @@ spdhint.goto(-155, 5)
 spdraw.goto(-160, 80)
 limdraw.goto(-320, 0)
 befehldisp.goto(-160, 220)
-xspdraw.goto(-160,40)
+xspdraw.goto(-160, 40)
 lkjdraw.goto(-200, 200)
-gaspress.goto(160,40)
+gaspress.goto(160, 40)
 routedisp.goto(-340, 0)
 
 xspdraw.speed('fastest')
@@ -232,7 +245,7 @@ maxspder.pencolor('orange')
 acreqer.pencolor('orange')
 spdhint.pencolor(MYBLUE)
 routedisp.pencolor(MYBLUE)
-#xspdraw.pencolor('purple')
+# xspdraw.pencolor('purple')
 
 infobar.speed('fastest')
 
@@ -253,8 +266,8 @@ routedisp.hideturtle()
 
 if LEVEL < 2:
     limdraw.hideturtle()
-#acreqer.hideturtle()
-#turtle.tracer(True, 500)
+# acreqer.hideturtle()
+# turtle.tracer(True, 500)
 
 # 320 positions, 40 each, so here are 8
 # [S Level] [P] [D] [S] [1] [2] [E] [M]
@@ -263,9 +276,11 @@ turtle.pensize(2)
 
 iustr = ["240", "P", "D", "S", "1", "2", "E", "M", "Sifa", "Off"]
 tcolor = ["blue", "green", "orange", "red", "green", "green", "blue", "blue", "orange", "blue"]
-xcolor = ["white"]*10
-#light = [True]*10
-light = [True,False,False,False,False,False,False,False,False,False,False]
+xcolor = ["white"] * 10
+# light = [True]*10
+light = [True, False, False, False, False, False, False, False, False, False, False]
+
+
 def render_bar():
     turtle3.clear()
     turtle3.right(turtle3.heading())
@@ -289,15 +304,15 @@ def render_bar():
             for j in range(4):
                 turtle3.forward(40)
                 turtle3.right(90)
-            #turtle.right(90)
-            #print(turtle.heading())
+            # turtle.right(90)
+            # print(turtle.heading())
             turtle3.end_fill()
             turtle3.penup()
             turtle3.forward(20)
             turtle3.right(90)
             turtle3.forward(20)
             turtle3.pencolor(xcolor[i])
-            turtle3.write(iustr[i],align='center')
+            turtle3.write(iustr[i], align='center')
             if DARK:
                 turtle3.pencolor('white')
             else:
@@ -306,9 +321,9 @@ def render_bar():
             turtle3.forward(20)
             turtle3.right(90)
             turtle3.forward(20)
-            #turtle.left(turtle.heading())
-            
-            #turtle.left(90)
+            # turtle.left(turtle.heading())
+
+            # turtle.left(90)
             turtle3.right(90)
             turtle3.forward(40)
             turtle3.right(90)
@@ -316,14 +331,15 @@ def render_bar():
             # For debug,
             turtle3.right(90)
             turtle3.forward(40)
-            #turtle.forward(80)
-            #turtle.right(90)
-            #turtle.forward(40)
-            #turtle.right(90)
-            #print(turtle.heading())
+            # turtle.forward(80)
+            # turtle.right(90)
+            # turtle.forward(40)
+            # turtle.right(90)
+            # print(turtle.heading())
             turtle3.pendown()
-            #time.sleep(4)
-            #print("==")
+            # time.sleep(4)
+            # print("==")
+
 
 def render_route_tackle(csp, cx, cy):
     global extcmd, lastseg, furseg, DRANGE, LEVEL, FONT, MYBLUE, MYGREEN, MYWHITE, curspeed, show_name
@@ -342,7 +358,7 @@ def render_route_tackle(csp, cx, cy):
         routedisp.write(" ".join(csp[2:]), align='right', font=FONT)
     elif csp[1] == "S":
         # Draw signal lights, status represent at csp[3]:
-        #routedisp.pencolor(MYWHITE)
+        # routedisp.pencolor(MYWHITE)
         if LEVEL <= 2:
             routedisp.fillcolor('white')
             routedisp.begin_fill()
@@ -364,7 +380,7 @@ def render_route_tackle(csp, cx, cy):
                 routedisp.begin_fill()
                 routedisp.circle(3)
                 routedisp.end_fill()
-                routedisp.goto(cx-6, cy)
+                routedisp.goto(cx - 6, cy)
                 routedisp.fillcolor('yellow')
                 routedisp.begin_fill()
                 routedisp.circle(3)
@@ -374,13 +390,13 @@ def render_route_tackle(csp, cx, cy):
                 routedisp.begin_fill()
                 routedisp.circle(3)
                 routedisp.end_fill()
-                routedisp.goto(cx-6, cy)
+                routedisp.goto(cx - 6, cy)
                 routedisp.fillcolor('yellow')
                 routedisp.begin_fill()
                 routedisp.circle(3)
                 routedisp.end_fill()
             elif csp[3].isdigit() and csp[3] != "0":
-                if curspeed > int(csp[3])*10:
+                if curspeed > int(csp[3]) * 10:
                     routedisp.pencolor('orange')
                 routedisp.write("Hp " + csp[3] + "0", align='right', font=FONT)
             else:
@@ -389,7 +405,7 @@ def render_route_tackle(csp, cx, cy):
                 routedisp.circle(3)
                 routedisp.end_fill()
         if show_name:
-            routedisp.goto(cx-10, cy)
+            routedisp.goto(cx - 10, cy)
             routedisp.pencolor(MYBLUE)
             routedisp.write(csp[2], align='right', font=FONT)
     elif csp[1] == "P0":
@@ -397,6 +413,7 @@ def render_route_tackle(csp, cx, cy):
         routedisp.write("El 1", align='right', font=FONT)
     elif csp[1] == "P1":
         routedisp.write("El 2", align='right', font=FONT)
+
 
 def render_route():
     global extcmd, lastseg, furseg, DRANGE, LEVEL, FONT, MYBLUE, MYGREEN, MYWHITE, curspeed
@@ -417,8 +434,8 @@ def render_route():
             if dis < cfurseg[0]:
                 cfurseg = [dis, csp]
         else:
-            routedisp.goto(cx, dis/20)
-            render_route_tackle(csp, cx, dis/20)
+            routedisp.goto(cx, dis / 20)
+            render_route_tackle(csp, cx, dis / 20)
     routedisp.goto(cx, -20)
     render_route_tackle(clastseg[1], cx, -20)
     routedisp.goto(cx, 240)
@@ -426,7 +443,8 @@ def render_route():
     routedisp.goto(cx, 255)
     if len(cfurseg[1]) >= 2:
         routedisp.pencolor(MYBLUE)
-        routedisp.write(str(round(cfurseg[0]/1000, 2)), align='right', font=FONT)
+        routedisp.write(str(round(cfurseg[0] / 1000, 2)), align='right', font=FONT)
+
 
 def gtcs3_load():
     global LEVEL, curspeed, lastspdlim, zusatz_lastspdlim, lbdisp
@@ -438,11 +456,11 @@ def gtcs3_load():
     limdraw.pendown()
     limdraw.pencolor('orange')
     limdraw.pensize(3)
-    limdraw.goto(-320, min(220, nextdist/20))
+    limdraw.goto(-320, min(220, nextdist / 20))
     limdraw.penup()
-    if (nextdist/20) >= 220:
+    if (nextdist / 20) >= 220:
         limdraw.goto(-320, 240)
-        limdraw.write(str(round(nextdist/1000, 2)), font=FONT)
+        limdraw.write(str(round(nextdist / 1000, 2)), font=FONT)
         limdraw.hideturtle()
     xspdraw.clear()
     xspdraw.penup()
@@ -459,7 +477,8 @@ def gtcs3_load():
         smj += "/" + str(lbdisp)
         if curspeed < lbdisp:
             xspdraw.pencolor('maroon1')
-    xspdraw.write(smj,align='center',font=FONT)
+    xspdraw.write(smj, align='center', font=FONT)
+
 
 def gtcs3_init(noload=False):
     global LEVEL
@@ -469,18 +488,20 @@ def gtcs3_init(noload=False):
     if not noload:
         gtcs3_load()
 
+
 def gtcs3_exit(level=1):
     global LEVEL
     if LEVEL < level:
         return
     LEVEL = level
     lkj_draw('white')
-    #turtle2.clear()
+    # turtle2.clear()
     if LEVEL == 1:
         limdraw.clear()
         limdraw.hideturtle()
         xspdraw.clear()
     start_sound("gexit")
+
 
 # GTCS renderer
 def render_gtcs():
@@ -493,40 +514,41 @@ def render_gtcs():
     turtle.penup()
     # Set number indications
     turtle.goto(-160, 0)
-    #turtle.circle(80, -60)
+    # turtle.circle(80, -60)
     for i in range(0, 300, 60):
         turtle.circle(80, -60)
-        turtle.write(str(i),font=FONT)
+        turtle.write(str(i), font=FONT)
     turtle.right(turtle.heading())
-    #turtle.circle(80, -60)
+    # turtle.circle(80, -60)
     turtle.goto(160, 0)
     turtle.pendown()
     turtle.circle(80)
     turtle.penup()
     turtle.goto(160, 0)
-    #turtle.circle(80, -60)
-    for i in range(0, 300, 60):       
+    # turtle.circle(80, -60)
+    for i in range(0, 300, 60):
         turtle.circle(80, -60)
-        turtle.write(str(abs(i-120)//2),font=FONT)
-    #turtle.left(90)
+        turtle.write(str(abs(i - 120) // 2), font=FONT)
+    # turtle.left(90)
     if LEVEL >= 3:
         gtcs3_init(True)
     # Also available for GTCS-1 now
     turtle2.clear()
     turtle2.penup()
     turtle2.goto(-300, 0)
-    for i in range(0,200,20):
+    for i in range(0, 200, 20):
         turtle2.goto(-300, i)
-        turtle2.write(str(i*20),font=FONT)
+        turtle2.write(str(i * 20), font=FONT)
     render_bar()
     spdturtle.goto(-160, 80)
     thrturtle.goto(160, 80)
     infobar.goto(-160, -120)
     turtle.update()
 
+
 # 'Yellow-2' requires special operations
 # at (-200, 200) by default, size 20.
-def lkj_draw(col1,col2=""):
+def lkj_draw(col1, col2=""):
     lkjdraw.clear()
     lkjdraw.penup()
     lkjdraw.right(lkjdraw.heading())
@@ -553,12 +575,14 @@ def lkj_draw(col1,col2=""):
         lkjdraw.circle(20, 180)
         lkjdraw.end_fill()
 
+
 prelkj = "?"
 gfailind = False
 
+
 def render_gtcs_main():
-    global gfailind, prelkj, light, caccel, prereded, curspeed, acreqspd, spdlim, lastspdlim, accreq, gtcsinfo, sysinfo, thrust, eb, nextdist, failures, zusatz_lastspdlim
-    #print("GTCS Renderer")
+    global gfailind, prelkj, light, caccel, prereded, curspeed, acreqspd, spdlim, lastspdlim, accreq, gtcsinfo, sysinfo, thrust, eb, nextdist, failures, zusatz_lastspdlim, has_afb
+    # print("GTCS Renderer")
     gaspress.clear()
     acreqer.hideturtle()
     acreqer.goto(-160, 0)
@@ -594,27 +618,27 @@ def render_gtcs_main():
     maxspder.forward(75)
     maxspder.penup()
     acreqer.right(acreqer.heading())
-    acreqer.circle(80, 60 + (240-curspeed))
-    #acreqer.right(accreq/4)
+    acreqer.circle(80, 60 + (240 - curspeed))
+    # acreqer.right(accreq/4)
     acreqer.pendown()
     if (acreqspd) < curspeed:
         wacreqspd = curspeed + accreq * (20 * 3.6)
         if wacreqspd < min(spdlim, lastspdlim, zusatz_lastspdlim):
             wacreqspd = min(spdlim, lastspdlim, zusatz_lastspdlim)
-        acreqer.circle(80, (wacreqspd-curspeed)*(-1))
+        acreqer.circle(80, (wacreqspd - curspeed) * (-1))
     acreqer.left(90)
     acreqer.penup()
     spdhint.right(spdhint.heading())
-    spdhint.circle(80, 60 + (240-curspeed))
+    spdhint.circle(80, 60 + (240 - curspeed))
     spdhint.pendown()
-    cspdexp = curspeed + (caccel*100)
+    cspdexp = curspeed + (caccel * 100)
     if cspdexp > 240:
         cspdexp = 240
     elif cspdexp < 0:
         cspdexp = 0
     # debug
-    #print(cspdexp)
-    spdhint.circle(80, (cspdexp-curspeed)*(-1))
+    # print(cspdexp)
+    spdhint.circle(80, (cspdexp - curspeed) * (-1))
     spdhint.left(90)
     spdhint.penup()
     thrturtle.pendown()
@@ -630,13 +654,13 @@ def render_gtcs_main():
     spdraw.end_fill()
     spdraw.penup()
     spdraw.goto(-160, 80)
-    #spdraw.
-    spdraw.write(str(int(curspeed)),align='center',font=FONT)
+    # spdraw.
+    spdraw.write(str(int(curspeed)), align='center', font=FONT)
     infobar.clear()
     if thrust >= 0:
-        gaspress.write("600",align='center',font=FONT)
+        gaspress.write("600", align='center', font=FONT)
     else:
-        gpress = max(0, int(600+(power*6.4) - 5 + random.randint(0, 10)))
+        gpress = max(0, int(600 + (power * 6.4) - 5 + random.randint(0, 10)))
         if gpress > 600:
             gpress = 600
         if gpress < 100:
@@ -645,8 +669,10 @@ def render_gtcs_main():
                 start_sound("braking")
         else:
             gfailind = False
-        gaspress.write(str(gpress),align='center',font=FONT)
+        gaspress.write(str(gpress), align='center', font=FONT)
     # Generate info
+    if has_afb:
+        gtcsinfo.append(["AFB Enabled", MYGREEN])
     for i in failures:
         if failures[i][1] or (failures[i][2]()):
             gtcsinfo.append([failures[i][0], "maroon1"])
@@ -655,16 +681,16 @@ def render_gtcs_main():
             i[1] = "cyan"
         infobar.pencolor(i[1])
         infobar.pendown()
-        infobar.write(i[0],font=FONT)
+        infobar.write(i[0], font=FONT)
         infobar.penup()
-        infobar.goto(infobar.xcor(), infobar.ycor()-30)
+        infobar.goto(infobar.xcor(), infobar.ycor() - 30)
     infobar.goto(120, -120)
     for i in sysinfo:
         infobar.pencolor(i[1])
         infobar.pendown()
-        infobar.write(i[0],font=FONT)
+        infobar.write(i[0], font=FONT)
         infobar.penup()
-        infobar.goto(infobar.xcor(), infobar.ycor()-30)
+        infobar.goto(infobar.xcor(), infobar.ycor() - 30)
     if curlkj == "0" or curlkj == "00":
         if curlkj == "00" or prereded:
             lkj_draw("red")
@@ -681,9 +707,9 @@ def render_gtcs_main():
         lkjdraw.color('white')
         lkj_draw('yellow')
         lkjdraw.penup()
-        lkjdraw.goto(-200,215)
+        lkjdraw.goto(-200, 215)
         lkjdraw.color('black')
-        lkjdraw.write("2",font=FONT)
+        lkjdraw.write("2", font=FONT)
     elif curlkj == "3":
         lkj_draw('green')
     elif curlkj in "4567":
@@ -691,8 +717,8 @@ def render_gtcs_main():
         lkj_draw('green')
         lkjdraw.penup()
         lkjdraw.color('white')
-        lkjdraw.goto(-200,215)
-        lkjdraw.write(str(int(curlkj)-2),font=FONT)
+        lkjdraw.goto(-200, 215)
+        lkjdraw.write(str(int(curlkj) - 2), font=FONT)
         lkjdraw.color('black')
     else:
         lkj_draw('white')
@@ -714,7 +740,7 @@ def render_gtcs_main():
                 start_sound("green")
             else:
                 start_sound("green" + str(int(curlkj) - 2))
-    
+
     lkjdraw.penup()
     maxspder.right(maxspder.heading())
     spdturtle.right(spdturtle.heading())
@@ -731,19 +757,28 @@ def render_gtcs_main():
     turtle.update()
     turtle.ontimer(render_gtcs_main, 200)
 
-def kup():
+
+def kup(smooth=False):
     global power, thrust
-    #print("Keyup")
+    # print("Keyup")
     if power > 300:
         return
-    power = (power//10)*10+10
+    if smooth:
+        power += 1
+        return
+    power = (power // 10) * 10 + 10
 
-def kdn():
+
+def kdn(smooth=False):
     global power, thrust
-    #print("Keydn")
+    # print("Keydn")
     if power < -100:
         return
-    power = (power//10)*10-10
+    if smooth:
+        power -= 1
+        return
+    power = (power // 10) * 10 - 10
+
 
 def ksupp():
     global accreq, spdlim, lastspdlim, on_keyboard
@@ -759,6 +794,7 @@ def ksupp():
         lastspdlim = 240
     light[9] = not light[9]
 
+
 acreqspd = 240
 accuer = 0
 limitz = []
@@ -766,6 +802,7 @@ caccel = 0
 contnz = 0
 plog = []
 tcnter1 = 0
+
 
 def physics():
     global lastspdlim, tcnter1, plog, contnz, caccel, limitz, accuer, curspeed, thrust, gtcsinfo, accreq, power, acreqspd, LEVEL, schutz, schutz_info, sysinfo, zusatz_lastspdlim
@@ -796,24 +833,24 @@ def physics():
     light[4] = (abs(power) > 0)
     light[5] = (abs(power) > 30)
     light[6] = (power < -40)
-    
+
     gtcsinfo = []
     if light[9]:
         gtcsinfo = [["GTCS-1 Overridden", "blue"]]
     else:
         if spdlim < 240:
-            gtcsinfo = [["GTCS-"+str(LEVEL)+" speed limit " + str(spdlim) + " km/h", "orange"]]
+            gtcsinfo = [["GTCS-" + str(LEVEL) + " speed limit " + str(spdlim) + " km/h", "orange"]]
         cspdlim = spdlim
-        #light[3] = False
+        # light[3] = False
         cacreqspd = acreqspd
         if curspeed > spdlim:
-            #if len(limitz) >= 10:
-            #cacreqspd = max(acreqspd,limitz[0] + 5)
+            # if len(limitz) >= 10:
+            # cacreqspd = max(acreqspd,limitz[0] + 5)
             #    if len(limitz) > 10:
             #        limitz = limitz[1:]
-            #if cacreqspd < 240:
+            # if cacreqspd < 240:
             #    gtcsinfo.append(["GTCS-"+str(LEVEL)+" deflection " + str(int(cacreqspd)) + " km/h","orange"])
-            #gtcsinfo.append(["Acceleration " + str(round(accreq,2)),"orange"])
+            # gtcsinfo.append(["Acceleration " + str(round(accreq,2)),"orange"])
             if accreq < -1.5:
                 gtcsinfo.append(["Deflect now", "orange"])
                 start_sound("deflect")
@@ -847,13 +884,13 @@ def physics():
             acreqspd = curspeed + accreq * (2 * 3.6)
             if acreqspd < 0:
                 acreqspd = 0
-            if acreqspd < min(lastspdlim,spdlim):
-                acreqspd = min(lastspdlim,spdlim)
+            if acreqspd < min(lastspdlim, spdlim):
+                acreqspd = min(lastspdlim, spdlim)
         if schutz:
             light[3] = True
             gtcsinfo.append([schutz_info, "red"])
-        #limitz.append(acreqspd)
-        #gtcsinfo = []
+        # limitz.append(acreqspd)
+        # gtcsinfo = []
         if light[3]:
             if thrust >= -40:
                 if curspeed > 60 and power < 0:
@@ -868,8 +905,9 @@ def physics():
                 start_sound("zb")
     if light[6]:
         gtcsinfo.append(["Magnet-brake", "blue"])
-    
+
     turtle.ontimer(physics, 200)
+
 
 ### TODO: Use requests library.
 
@@ -877,18 +915,22 @@ def test1():
     global spdlim
     spdlim -= 1
 
+
 def test2():
     global spdlim
     spdlim += 1
+
 
 def test3():
     global accreq
     accreq -= 1
 
+
 def test4():
     global accreq
     accreq += 1
-    
+
+
 befehltext = ""
 bns = ""
 befconf = False
@@ -896,6 +938,7 @@ befconf = False
 keyboard = ""
 on_keyboard = False
 next_keyboard = lambda: None
+
 
 def befshow(bcset=False):
     global bns, befehltext, befconf, keyboard, on_keyboard
@@ -906,16 +949,18 @@ def befshow(bcset=False):
     if on_keyboard:
         bs.append(keyboard)
     for i in bs:
-        befehldisp.write(i,font=FONT)
-        befehldisp.goto(-160, befehldisp.ycor()-15)
+        befehldisp.write(i, font=FONT)
+        befehldisp.goto(-160, befehldisp.ycor() - 15)
     if bcset:
         befconf = True
+
 
 def keyboard_add(char):
     global keyboard, on_keyboard
     if on_keyboard:
         keyboard += char
         befshow()
+
 
 def befshow2():
     global on_keyboard
@@ -924,6 +969,7 @@ def befshow2():
         return
     befshow(True)
 
+
 def befclr():
     global befehltext, on_keyboard
     if on_keyboard:
@@ -931,10 +977,12 @@ def befclr():
         return
     befehldisp.clear()
 
+
 def locupd():
     tloc = turtle.textinput("GTCS", "Input current location:")
     if tloc != "":
         update_loc(tloc)
+
 
 def schutz_cancel():
     global schutz, on_keyboard, ps_queue
@@ -945,6 +993,7 @@ def schutz_cancel():
     light[3] = False
     ps_queue.clear()
 
+
 def locshow():
     global zugat, befehltext, on_keyboard
     if on_keyboard:
@@ -953,12 +1002,14 @@ def locshow():
     befehltext = "Current location: " + zugat
     befshow()
 
+
 def change_loc_nxstep():
     global keyboard, on_keyboard, next_keyboard
     update_loc(keyboard)
     on_keyboard = False
     next_keyboard = lambda: None
     befclr()
+
 
 def change_loc():
     global bns, on_keyboard, next_keyboard, gauto
@@ -972,6 +1023,7 @@ def change_loc():
     on_keyboard = True
     befshow()
 
+
 t.screen.onkey(kup, 'Up')
 t.screen.onkey(kdn, 'Down')
 t.screen.onkey(ksupp, '9')
@@ -982,42 +1034,47 @@ t.screen.onkey(locshow, '6')
 t.screen.onkey(schutz_cancel, '5')
 t.screen.onkey(change_loc, '4')
 
+
 def wind_charge():
     global apress, on_keyboard
     if on_keyboard:
         keyboard_add('o')
         return
-    apress += random.randint(50,150)/10
+    apress += random.randint(50, 150) / 10
+
 
 def wind_release():
     global apress, on_keyboard
     if on_keyboard:
         keyboard_add('p')
         return
-    apress -= random.randint(50,150)/10
+    apress -= random.randint(50, 150) / 10
     if apress < 0:
         apress = 0
+
 
 def elec_charge():
     global eamps, evolts, on_keyboard
     if on_keyboard:
         keyboard_add('k')
         return
-    evolts += random.randint(10,30)
-    eamps += random.randint(10,30)/20
+    evolts += random.randint(10, 30)
+    eamps += random.randint(10, 30) / 20
+
 
 def elec_release():
     global eamps, evolts, on_keyboard
     if on_keyboard:
         keyboard_add('l')
         return
-    evolts -= random.randint(10,30)
-    eamps -= random.randint(10,30)/20
+    evolts -= random.randint(10, 30)
+    eamps -= random.randint(10, 30) / 20
     if evolts < 0:
         evolts = 0
     if eamps < 0:
         eamps = 0
-        
+
+
 def swtc_pwr():
     global cpsrc, on_keyboard
     if on_keyboard:
@@ -1028,13 +1085,15 @@ def swtc_pwr():
     else:
         cpsrc = "a"
 
+
 def panto_swtc():
     global cpsrc, on_keyboard
     if on_keyboard:
         keyboard_add('s')
         return
     cpsrc = "p"
-    
+
+
 def name_disp():
     global show_name, on_keyboard
     if on_keyboard:
@@ -1042,14 +1101,25 @@ def name_disp():
         return
     show_name = not show_name
 
+
+def change_afb():
+    global on_keyboard, has_afb
+    if on_keyboard:
+        keyboard_add('g')
+        return
+    has_afb = not has_afb
+
+
 t.screen.onkey(wind_charge, 'o')
 t.screen.onkey(wind_release, 'p')
 t.screen.onkey(elec_charge, 'k')
 t.screen.onkey(elec_release, 'l')
 t.screen.onkey(swtc_pwr, 'a')
 t.screen.onkey(panto_swtc, 's')
+t.screen.onkey(change_afb, 'g')
 
 t.screen.onkey(name_disp, '0')
+
 
 def syspage_switch(ckey):
     global csyspage, on_keyboard
@@ -1058,13 +1128,15 @@ def syspage_switch(ckey):
         return
     csyspage = ckey
 
+
 for i in syspages:
     t.screen.onkey(eval("lambda: syspage_switch('{}')".format(i)), i)
 
-for i in '123tyuidfghjzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM':
+for i in '123tyuidfhjzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM':
     t.screen.onkey(eval("lambda: keyboard_add('{}')".format(i)), i)
 
 t.screen.onkey(lambda: keyboard_add('_'), ',')
+
 
 def discard_keyboard():
     global on_keyboard, keyboard, next_keyboard
@@ -1073,14 +1145,17 @@ def discard_keyboard():
     next_keyboard = lambda: None
     befclr()
 
+
 def proceed_keyboard():
     global on_keyboard, keyboard, next_keyboard
     next_keyboard()
+
 
 t.screen.onkey(discard_keyboard, '.')
 t.screen.onkey(proceed_keyboard, '/')
 
 t.screen.listen()
+
 
 def translate(signal):
     cspdlim = 0
@@ -1091,16 +1166,18 @@ def translate(signal):
     elif signal == "/" or signal == "<" or signal == ">":
         cspdlim = 60
     elif signal.isdigit():
-        cspdlim = (int(signal))*10
+        cspdlim = (int(signal)) * 10
     else:
         cspdlim = 0
     if cspdlim > 240:
         return 240
     return cspdlim
 
+
 autog3 = True
 ospeed = spdlim
 geschw = 120
+
 
 def update_loc(target):
     global geschw, curlkj, prereded, accuer, lastspdlim, g3err, LEVEL, zugat, spdlim, accreq, ZUGNAME, autog3, ospeed, AUTH
@@ -1112,7 +1189,7 @@ def update_loc(target):
         u = urlopen(SCTR + "?sid=" + target)
         su = u.read().decode('utf-8')
         u.close()
-        #print("Full text:",su)
+        # print("Full text:",su)
         sus = su.strip()
         signal = "0"
         if len(sus) > 1:
@@ -1150,13 +1227,15 @@ def update_loc(target):
         u.read()
         u.close()
     except Exception as e:
-        print("Error:",str(e))
+        print("Error:", str(e))
         spdlim = 0
+
 
 g3err = []
 
 GLOGGING = False
 PLOGGING = False
+
 
 def schutz_broadcast(info):
     global schutz, schutz_info
@@ -1165,7 +1244,7 @@ def schutz_broadcast(info):
 
 
 def console():
-    global SCHUTZ_PROB, SCHUTZ_SIMU, SCTR, ZCTR, DCTR, BCTR, LCTR, ICTR, GLOGGING, PLOGGING, plog, ZUGNAME, spdlim, zugat, gtcsinfo, accreq, acreqspd, thrust, accuer, LEVEL, g3err, autog3, failures
+    global SCHUTZ_PROB, SCHUTZ_SIMU, SCTR, ZCTR, DCTR, BCTR, LCTR, ICTR, GLOGGING, PLOGGING, plog, ZUGNAME, spdlim, zugat, gtcsinfo, accreq, acreqspd, thrust, power, accuer, LEVEL, g3err, autog3, failures
     while True:
         ip = input(">>> ")
         cmd = ip.split(" ")
@@ -1173,7 +1252,7 @@ def console():
             print("Invalid command - too short")
             continue
         if cmd[0] == "at":
-            #zugat = cmd[1]
+            # zugat = cmd[1]
             if len(cmd) < 2:
                 print("Invalid at command")
                 continue
@@ -1181,7 +1260,7 @@ def console():
             print("Successfully updated location")
         elif cmd[0] == "ren":
             if len(cmd) < 2:
-                print("Current name",ZUGNAME)
+                print("Current name", ZUGNAME)
                 continue
             ZUGNAME = cmd[1]
             print("Successfully updated name")
@@ -1205,8 +1284,12 @@ def console():
                 print(curlkj)
             elif cmd[1] == "6":
                 print(maxthr_val())
+            elif cmd[1] == "6n":
+                print(power)
+            elif cmd[1] == "s":
+                print(min(lastspdlim, zusatz_lastspdlim))
         elif cmd[0] == "glog":
-            print("Currently GTCS",LEVEL)
+            print("Currently GTCS", LEVEL)
             print("\n".join(g3err))
         elif cmd[0] == "gclr":
             g3err = []
@@ -1227,7 +1310,7 @@ def console():
                 gtcs3_exit()
         elif cmd[0] == "gauto":
             autog3 = not autog3
-            print("GTCS-3 automatic activate is now",autog3)
+            print("GTCS-3 automatic activate is now", autog3)
         elif cmd[0] == "sset":
             if len(cmd) < 2:
                 print("Invalid at command")
@@ -1235,28 +1318,28 @@ def console():
             spdlim = int(cmd[1])
         elif cmd[0] == "glstat":
             GLOGGING = not GLOGGING
-            print("GLog is now",GLOGGING)
+            print("GLog is now", GLOGGING)
         elif cmd[0] == "plstat":
             PLOGGING = not PLOGGING
-            print("PLog is now",GLOGGING)
+            print("PLog is now", GLOGGING)
         elif cmd[0] == "ip":
             if len(cmd) < 2:
                 print("Invalid ip command")
                 continue
-            SCTR="http://{ip}:5033/signal".format(ip=cmd[1])
-            ZCTR="http://{ip}:5033/zug".format(ip=cmd[1])
-            DCTR="http://{ip}:5033/zugdist".format(ip=cmd[1])
-            BCTR="http://{ip}:5033/befehl".format(ip=cmd[1])
-            LCTR="http://{ip}:5033/lkjdisp".format(ip=cmd[1])
-            ICTR="http://{ip}:5033/signaldata".format(ip=cmd[1])
+            SCTR = "http://{ip}:5033/signal".format(ip=cmd[1])
+            ZCTR = "http://{ip}:5033/zug".format(ip=cmd[1])
+            DCTR = "http://{ip}:5033/zugdist".format(ip=cmd[1])
+            BCTR = "http://{ip}:5033/befehl".format(ip=cmd[1])
+            LCTR = "http://{ip}:5033/lkjdisp".format(ip=cmd[1])
+            ICTR = "http://{ip}:5033/signaldata".format(ip=cmd[1])
         elif cmd[0] == "schutz":
             if len(cmd) < 2:
                 SCHUTZ_SIMU = not SCHUTZ_SIMU
-                print("Schutz simulator is now",SCHUTZ_SIMU)
+                print("Schutz simulator is now", SCHUTZ_SIMU)
             else:
                 if cmd[1].isdigit():
                     SCHUTZ_PROB = int(cmd[1])
-                    print("Schutz probability is now",SCHUTZ_PROB)
+                    print("Schutz probability is now", SCHUTZ_PROB)
                 else:
                     schutz_broadcast(cmd[1])
         elif cmd[0] == "failmgmt":
@@ -1267,18 +1350,19 @@ def console():
             else:
                 try:
                     failures[cmd[1]][1] = not failures[cmd[1]][1]
-                    print("Failure item '{}' is configured to".format(failures[cmd[1]][0]),failures[cmd[1]][1])
+                    print("Failure item '{}' is configured to".format(failures[cmd[1]][0]), failures[cmd[1]][1])
                 except Exception as e:
-                    print("Unable to configure",e)
+                    print("Unable to configure", e)
         else:
             print("Invalid command")
+
 
 def accelreq(spdlim, sd):
     global curspeed, caccel
     raw = 0
     if curspeed > spdlim:
         if sd > 100:
-            raw = (((spdlim/3.6)**2 - ((curspeed + max(0,caccel+0.2) * 3)/3.6)**2)/(2*(sd-100)))
+            raw = (((spdlim / 3.6) ** 2 - ((curspeed + max(0, caccel + 0.2) * 3) / 3.6) ** 2) / (2 * (sd - 100)))
             if sd < 500:
                 raw -= 0.25
             elif sd < 1200:
@@ -1289,8 +1373,11 @@ def accelreq(spdlim, sd):
             raw = -4
     return raw
 
+zusatz_spdlim = 300
+zusatz_spdlim_at = 10000000
+
 def gtcs3():
-    global lbdisp, passdz, geschw, lastseg, furseg, extcmd, LCTR, curlkj, lastspdlim, g3err, accuer, curspeed, caccel, nextdist, spdlim, accreq, acreqspd, zugat, ospeed, zusatz_lastspdlim
+    global lbdisp, passdz, geschw, lastseg, furseg, extcmd, LCTR, curlkj, lastspdlim, g3err, accuer, curspeed, caccel, nextdist, spdlim, accreq, acreqspd, zugat, ospeed, zusatz_lastspdlim, zusatz_spdlim, zusatz_spdlim_at, appdz
     while True:
         # Load actual special command
         zusatz_spdlim = 300
@@ -1308,54 +1395,69 @@ def gtcs3():
                 extinf = u.read().decode('utf-8')
                 u.close()
                 extcmd = extinf.split("\n")
-                remdis = int(extcmd[0])
-                sname = "?"
-                esc = extcmd[1:]
-                for i in esc:
-                    csp = i.split(" ")
-                    dis = int(csp[0])
-                    if csp[1] == "S" and sname == "?":
-                        sname = csp[2]
-                    elif csp[1] == "Le":
-                        if dis < 0:
-                            last_cancel = max(last_cancel, dis)
-                        else:
-                            last_fcancel = min(last_fcancel, dis)
-                    elif csp[1] == "P0":
-                        if dis < 0:
-                            pass_p0 = max(pass_p0, dis)
-                    elif csp[1] == "P1":
-                        if dis < 0:
-                            pass_p1 = max(pass_p1, dis)
-                passdz = (pass_p0 >= pass_p1)
-                for i in esc:
-                    csp = i.split(" ")
-                    if csp[1] == "La":
+                try:
+                    remdis = int(extcmd[0])
+                    sname = "?"
+                    esc = extcmd[1:]
+                    for i in esc:
+                        csp = i.split(" ")
                         dis = int(csp[0])
-                        if dis < 0:
-                            if dis > last_cancel:
-                                tmpz = min(tmpz, int(csp[3]))
-                                tmplb = max(tmplb, int(csp[2]))
-                        else:
-                            if dis < last_fcancel and int(csp[3]) <= zusatz_spdlim:
-                                zusatz_spdlim = int(csp[3])
-                                zusatz_spdlim_at = min(zusatz_spdlim_at, dis)
-                lbdisp = tmplb
-                zusatz_lastspdlim = tmpz
-                if LEVEL == 1:
-                    if remdis <= 0:
-                        accuer = 0
-                        update_loc(sname)
+                        if csp[1] == "S" and sname == "?":
+                            sname = csp[2]
+                        elif csp[1] == "Le":
+                            if dis < 0:
+                                last_cancel = max(last_cancel, dis)
+                            else:
+                                last_fcancel = min(last_fcancel, dis)
+                        elif csp[1] == "P0":
+                            if dis < 0:
+                                pass_p0 = max(pass_p0, dis)
+                            else:
+                                if dis < 500:
+                                    appdz = False
+                                elif dis < 1000:
+                                    if not appdz:
+                                        appdz = True
+                                        start_sound("neutral")
+                        elif csp[1] == "P1":
+                            if dis < 0:
+                                pass_p1 = max(pass_p1, dis)
+                                appdz = False
+                    passdz = (pass_p0 >= pass_p1)
+                    for i in esc:
+                        csp = i.split(" ")
+                        if csp[1] == "La":
+                            dis = int(csp[0])
+                            if dis < 0:
+                                if dis > last_cancel:
+                                    tmpz = min(tmpz, int(csp[3]))
+                                    tmplb = max(tmplb, int(csp[2]))
+                            else:
+                                if dis < last_fcancel and int(csp[3]) <= zusatz_spdlim:
+                                    zusatz_spdlim = int(csp[3])
+                                    zusatz_spdlim_at = min(zusatz_spdlim_at, dis)
+                    lbdisp = tmplb
+                    zusatz_lastspdlim = tmpz
+                    if LEVEL == 1:
+                        if remdis <= 0:
+                            accuer = 0
+                            update_loc(sname)
+                except Exception as e:
+                    g3err.append(time.ctime() + " GTCS-3: [To gtcs-2]" + str(e))
+                    gtcs3_exit(2)
+            else:
+                extcmd = []
         except Exception as e:
             g3err.append(time.ctime() + " GTCS-3: [To gtcs-2]" + str(e))
             gtcs3_exit(2)
-        
+            extcmd = []
+
         # Tackle with:
         # 1. Neutral area
         # 2. Speed limits
         # (for display, let gtcs loader tackle)
         if LEVEL >= 2:
-            #print("Toggle#")
+            # print("Toggle#")
             try:
                 u = urlopen(DCTR + "?sid=" + zugat + "&dev=" + str(int(accuer)) + "&spd=" + str(int(geschw)))
                 su = u.read().decode('utf-8')
@@ -1363,7 +1465,7 @@ def gtcs3():
                 sr = su.split(" ")
                 sd = int(sr[0])
                 if sd <= 0:
-                    #lastspdlim = spdlim
+                    # lastspdlim = spdlim
                     accuer = 0
                     update_loc(sr[2])
                 else:
@@ -1374,7 +1476,7 @@ def gtcs3():
                         light[1] = False
                     ospeed = spdlim
                     # Dynamic value already.
-                    #if (zusatz_spdlim <= spdlim) or (zusatz_spdlim_at <= sd):
+                    # if (zusatz_spdlim <= spdlim) or (zusatz_spdlim_at <= sd):
                     #    spdlim = zusatz_spdlim
                     #    sd = zusatz_spdlim_at
                     # 2s speed monitor, but acceleration here, unit: m/s^2
@@ -1386,34 +1488,36 @@ def gtcs3():
                             if LEVEL >= 3:
                                 cslim = translate(csp[3])
                                 cac = accelreq(cslim, dis)
-                                if cac < raw:
+                                if cac < raw or (cac < 0 and abs(cac - raw) < 0.05 and dis < sd):
                                     raw = cac
                                     sd = dis
                                     spdlim = cslim
                         elif csp[1] == "La":
                             if (dis < last_fcancel) and (dis > 0):
                                 cac = accelreq(int(csp[3]), dis)
-                                if cac < raw:
+                                if cac < raw or (cac < 0 and abs(cac - raw) < 0.05 and dis < sd):
                                     raw = cac
                                     sd = dis
                                     spdlim = int(csp[3])
-                    #if sd > 3500:
+                    # if sd > 3500:
                     #    raw = 0
                     clastspdlim = min(lastspdlim, zusatz_lastspdlim)
                     if (curspeed > clastspdlim):
                         if (curspeed - clastspdlim > 80):
-                            raw = min(raw,-12)
-                            #contnz += 1
+                            raw = min(raw, -12)
+                            # contnz += 1
                         elif (curspeed - clastspdlim > 60):
-                            raw = min(raw,-6)
-                            #contnz += 0.5
+                            raw = min(raw, -6)
+                            # contnz += 0.5
                         else:
-                            raw = min(raw,-4)
-                            #contnz += 0.25
-                    g3err.append(time.ctime() + " GTCS-3: Raw acceleration " + str(round(raw,2)) + ", with vacr = " + str(round(acreqspd,2)))
-                    accreq = min(0,raw)
-                    #acreqspd = curspeed + (max(0,caccel+0.2) * 3) + accreq * (2 / 3.6)
-                    #acreqspd = curspeed + accreq * (2 * 3.6)
+                            raw = min(raw, -4)
+                            # contnz += 0.25
+                    g3err.append(
+                        time.ctime() + " GTCS-3: Raw acceleration " + str(round(raw, 2)) + ", with vacr = " + str(
+                            round(acreqspd, 2)))
+                    accreq = min(0, raw)
+                    # acreqspd = curspeed + (max(0,caccel+0.2) * 3) + accreq * (2 / 3.6)
+                    # acreqspd = curspeed + accreq * (2 * 3.6)
                     if acreqspd < 0:
                         acreqspd = 0
                     nextdist = sd
@@ -1427,16 +1531,19 @@ def gtcs3():
                 if lastspdlim <= 0:
                     curlkj = "00"
                     prereded = True
-                #print("Accumulate",accuer,nextdist)
+                # print("Accumulate",accuer,nextdist)
             except Exception as e:
                 g3err.append(time.ctime() + " GTCS-3:" + str(e))
                 gtcs3_exit()
+
         time.sleep(2)
+
 
 def logclr():
     global GLOGGING, PLOGGING, g3err, plog, SCHUTZ_SIMU, SCHUTZ_PROB, failures, curspeed
 
-    SCHUTZ_AFFAIR = ["Hilichurlwarnung", "Slimenwarnung", "Eisenbahnfaulwarnung", "Unerwartetelementwarnung", "Abyssmagewarnung"]
+    SCHUTZ_AFFAIR = ["Hilichurlwarnung", "Slimenwarnung", "Eisenbahnfaulwarnung", "Unerwartetelementwarnung",
+                     "Abyssmagewarnung"]
 
     while True:
         if not GLOGGING:
@@ -1451,11 +1558,17 @@ def logclr():
                     if rc == "Unerwartetelementwarnung":
                         rw = random.choice(["ovldr", "scond", "eblock"])
                         failures[rw][1] = True
-        if (curspeed > 15) and (maxthr_val() < 10):
+        if ((curspeed > 15) and (maxthr_val() < 10)) or (failures["thr"][1]):
             start_sound("thrust")
+        for i in ["epwrlo", "epwrhi"]:
+            if failures[i][2]():
+                start_sound("volts")
+        for i in ["epwrslo", "epwrshi"]:
+            if failures[i][2]():
+                start_sound("amps")
         time.sleep(5)
-        
-        
+
+
 def befread():
     global g3err, BCTR, AUTH, befehltext, befconf, ZUGNAME
     while True:
@@ -1478,8 +1591,11 @@ def befread():
             g3err.append(time.ctime() + " GTCS Befehl: " + str(e))
         time.sleep(2)
 
+
 def gsmgmt():
-    global failures, power, SCHUTZ_PROB, apress, evolts, eamps, efreq, sysinfo, syspages, csyspage, cpsrc, passdz
+    global failures, power, SCHUTZ_PROB, apress, evolts, eamps, efreq, sysinfo, syspages, csyspage, cpsrc, passdz, curspeed, caccel, thrust, spdlim, lastspdlim, zusatz_lastspdlim, curlkj, zugat, light
+    s = open("blackbox_high_speed.csv","a")
+    ticker = 0
     while True:
         if random.randint(0, 35000) < SCHUTZ_PROB:
             rf = random.choice(list(failures))
@@ -1493,22 +1609,22 @@ def gsmgmt():
                 power += min(-power, 5)
         if failures["apwrlo"][1]:
             if apress > 10:
-                apress -= random.randint(10,40)/10
+                apress -= random.randint(10, 40) / 10
         if failures["apwrhi"][1]:
             if apress < 200:
-                apress += random.randint(10,40)/10
+                apress += random.randint(10, 40) / 10
         if failures["epwrlo"][1] or failures["eblock"][1]:
             if evolts > 10:
-                evolts -= random.randint(10,40)/10
+                evolts -= random.randint(10, 40) / 10
         if failures["epwrhi"][1] or failures["ovldr"][1]:
             if evolts < 3000:
-                evolts += random.randint(10,40)/10
+                evolts += random.randint(10, 40) / 10
         if failures["epwrslo"][1] or failures["eblock"][1]:
             if eamps > 0.1:
-                eamps -= random.randint(10,40)/10
+                eamps -= random.randint(10, 40) / 10
         if failures["epwrshi"][1] or failures["scond"][1]:
             if eamps < 100:
-                eamps += random.randint(10,40)/20
+                eamps += random.randint(10, 40) / 20
         sysinfo = []
         for i in syspages[csyspage]:
             sysinfo.append([i[0](), i[1]()])
@@ -1519,9 +1635,9 @@ def gsmgmt():
             else:
                 evolts = 2500
                 eamps = 80
-        apress += (random.randint(0,10)-5)/10
-        evolts += (random.randint(0,10)-5)/10
-        eamps += (random.randint(0,10)-5)/50
+        apress += (random.randint(0, 10) - 5) / 10
+        evolts += (random.randint(0, 10) - 5) / 10
+        eamps += (random.randint(0, 10) - 5) / 50
         if apress < 0:
             apress = 0
         if evolts < 0:
@@ -1530,11 +1646,82 @@ def gsmgmt():
             eamps = 0
         pmc = maxthr_val()
         if power > pmc:
-            power -= min(power-pmc, random.randint(10,30))
-        #power = min(power, maxthr_val())
+            power -= min(power - pmc, random.randint(10, 30))
+        # power = min(power, maxthr_val())
+        try:
+            if (ticker % 10) == 0:
+                s.write(",".join(
+                    [time.ctime(), str(round(curspeed, 2)), str(round(caccel * 5 / 3.6, 3)), str(round(thrust, 2)), str(spdlim),
+                     str(lastspdlim), str(zusatz_lastspdlim), curlkj, zugat, cpsrc, str(apress), str(evolts), str(eamps), ",".join([str(i) for i in light])]))
+                s.write("\n")
+            if ticker > 50:
+                ticker = 0
+                s.flush()
+            ticker += 1
+        except:
+            failures["logerr"][1] = True
+        else:
+            failures["logerr"][1] = False
         time.sleep(0.1)
 
-#turtle.right(90)
+
+def afb():
+    global curspeed, spdlim, lastspdlim, zusatz_spdlim, zusatz_spdlim_at, zusatz_lastspdlim, accreq, thrust, caccel, has_afb, plog, LEVEL, nextdist
+    # caccel: (km/h)/s, to be divided by 3.6
+    while True:
+        if has_afb:
+            csmin = min(lastspdlim, zusatz_lastspdlim)
+            if (LEVEL <= 1) or (nextdist < 2000):
+                csmin = min(csmin, spdlim)
+            if (LEVEL >= 3) and (zusatz_spdlim_at < 2000):
+                csmin = min(csmin, zusatz_spdlim)
+            acceldata = caccel * 5 / 3.6
+            if (accreq >= 0) or (LEVEL > 1 and nextdist >= 4000 and accreq > -0.05):
+                # plog.append(time.ctime() + " AFB Level 1")
+
+                if (csmin - 10) - (curspeed) > 60:
+                    if abs(acceldata - 1) > 0.05 or abs(thrust - 100) > 5:
+                        if (acceldata < 1) and (thrust < 100):
+                            kup(True)
+                        elif (acceldata > 1.05) or (thrust > 105):
+                            kdn(True)
+                    time.sleep(0.02)
+                elif curspeed < (csmin - 10):
+                    if abs(acceldata - 0.5) > 0.05 or abs(thrust - 20) > 5:
+                        if (acceldata < 0.5) and (thrust < 20):
+                            kup(True)
+                        elif (acceldata > 0.55) or (thrust > 25):
+                            kdn(True)
+                    time.sleep(0.02)
+                elif curspeed < csmin:
+                    if thrust <= -2:
+                        kup(True)
+                    elif thrust >= 2:
+                        kdn(True)
+                    time.sleep(0.02)
+                else:
+                    if thrust > -10:
+                        kdn(True)
+                    elif thrust < -10:
+                        kup(True)
+                    time.sleep(0.05)
+            elif (accreq < -0.1):
+                # plog.append(time.ctime() + " AFB Level 0")
+                if abs(acceldata - accreq) > 0.05:
+                    if accreq < acceldata:
+                        kdn(True)
+                    elif accreq > acceldata + 0.05:
+                        kup(True)
+                time.sleep(0.02)
+            else:
+                # plog.append(time.ctime() + " AFB Level 2")
+                time.sleep(1)
+        else:
+            # plog.append(time.ctime() + " AFB not enabled")
+            time.sleep(1)
+
+
+# turtle.right(90)
 render_gtcs()
 turtle.ontimer(render_gtcs_main, 100)
 turtle.ontimer(physics, 200)
@@ -1544,13 +1731,15 @@ tl = threading.Thread(target=logclr)
 tb = threading.Thread(target=befread)
 tsh = threading.Thread(target=sound_thr)
 tgs = threading.Thread(target=gsmgmt)
+tab = threading.Thread(target=afb)
 th.start()
 t3.start()
 tl.start()
 tb.start()
 tsh.start()
 tgs.start()
+tab.start()
 turtle.mainloop()
-#print(turtle.heading())
-#input()
-#render_bar()
+# print(turtle.heading())
+# input()
+# render_bar()
