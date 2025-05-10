@@ -1446,16 +1446,20 @@ def gtcs3():
                     if zugat != sr[3]:
                         accuer = 1
                         update_loc(sr[3])
-                u = urlopen(LCTR + "?sid=" + zugat)
-                su = u.read().decode('utf-8')
-                u.close()
-                curlkj = su
-                if lastspdlim <= 0:
-                    curlkj = "00"
-                    prereded = True
+                try:
+                    u = urlopen(LCTR + "?sid=" + zugat)
+                    su = u.read().decode('utf-8')
+                    u.close()
+                    curlkj = su
+                    if lastspdlim <= 0:
+                        curlkj = "00"
+                        prereded = True
+                except Exception as e:
+                    g3err.append(time.ctime() + " LKJ:" + str(e))
+                    curlkj = "?"
                 #print("Accumulate",accuer,nextdist)
             except Exception as e:
-                g3err.append(time.ctime() + " GTCS-3:" + str(e))
+                g3err.append(time.ctime() + " GTCS-3: exiting due to" + str(e))
                 gtcs3_exit()
         
         time.sleep(2)
