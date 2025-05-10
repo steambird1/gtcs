@@ -505,11 +505,16 @@ def signalist():
 
 @app.route("/signalstates")
 def signalstates():
-    global signals
+    global signals, zugin
     result = ""
     for i in signals:
         si = signals[i]
-        result += i + " " + str(si[0][0]) + " " + str(si[0][1]) + " " + str(si[1][0]) + " " + str(si[1][1]) + " " + si[2] + " " + ",".join(si[3]) + " " + str(si[4]) + "\n"
+        result += i + " " + str(si[0][0]) + " " + str(si[0][1]) + " " + str(si[1][0]) + " " + str(si[1][1]) + " " + si[2] + " " + ",".join(si[3]) + " " + str(si[4]) + " "
+        if i not in zugin:
+            result += "*"
+        else:
+            result += ("*" if (zugin[i].strip() == "") else zugin[i])
+        result += "\n"
     return result
 
 def prettyhtml(s):
