@@ -1385,7 +1385,6 @@ def gtcs3():
         tmpz = 300
         tmplb = 0
         last_cancel = -100000
-        last_fcancel = 100000
         pass_p0 = -100000
         pass_p1 = -99999
         try:
@@ -1407,8 +1406,6 @@ def gtcs3():
                         elif csp[1] == "Le":
                             if dis < 0:
                                 last_cancel = max(last_cancel, dis)
-                            else:
-                                last_fcancel = min(last_fcancel, dis)
                         elif csp[1] == "P0":
                             if dis < 0:
                                 pass_p0 = max(pass_p0, dis)
@@ -1433,7 +1430,7 @@ def gtcs3():
                                     tmpz = min(tmpz, int(csp[3]))
                                     tmplb = max(tmplb, int(csp[2]))
                             else:
-                                if dis < last_fcancel and int(csp[3]) <= zusatz_spdlim:
+                                if int(csp[3]) <= zusatz_spdlim:
                                     zusatz_spdlim = int(csp[3])
                                     zusatz_spdlim_at = min(zusatz_spdlim_at, dis)
                     lbdisp = tmplb
@@ -1493,7 +1490,7 @@ def gtcs3():
                                     sd = dis
                                     spdlim = cslim
                         elif csp[1] == "La":
-                            if (dis < last_fcancel) and (dis > 0):
+                            if (dis > 0):
                                 cac = accelreq(int(csp[3]), dis)
                                 if cac < raw or (cac < 0 and abs(cac - raw) < 0.05 and dis < sd):
                                     raw = cac
