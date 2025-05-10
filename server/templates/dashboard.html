@@ -22,9 +22,11 @@
 	    // Thanks to bing.
 	    var isDragging = false, startX, startY, scale = 1;
 	    const scaleFactor = 1.1;
+		
+		var cmousex = 0, cmousey = 0, ctransx = 0, ctransy = 0;
 	
 	    // Move before resize !!
-	    var MAP_MOVE_X = 820, MAP_MOVE_Y = 250, MAP_RESIZE_X = 1, MAP_RESIZE_Y = 1;
+	    var MAP_MOVE_X = 820, MAP_MOVE_Y = 300, MAP_RESIZE_X = 1, MAP_RESIZE_Y = 1;
 	
 	    function isdigit(x) {
 	        return /^\d+$/.test(x);
@@ -78,13 +80,19 @@
 			    let csc = sigcolor(crt[5]);
 			    cv.strokeStyle = csc;
 			    cv.fillStyle = csc;
-			    if (csc != 'green') {
-				    cv.fillText(crt[0] + ": " + crt[5], (xb+xe)/2, (yb+ye)/2);
-			    }
+			    //if (csc != 'green' || crt[8] != "*") {
+			    //}
+				if (cmousex >= Math.min(xb,xe) && cmousex <= Math.max(xb,xe) && cmousey >= Math.min(yb,ye) && cmousey <= Math.max(yb,ye)) {
+					cv.fillText(crt[0] + ": " + crt[5] + " & " + crt[8], (xb+xe)/2, (yb+ye)/2);
+					console.log("Moving to " + crt[0])
+				}
 			    cv.stroke();
 		    }
 		
 	    }
+		setInterval(function() {
+			systemRedraw();
+		}, 100);
 	
 	    setInterval(function() {
 	    // Not supported for server with high stress.
@@ -326,10 +334,18 @@
 		    });
 
 		    canvas.addEventListener('mousemove', (e) => {
+				var rect = canvas.getBoundingClientRect(); // 获取canvas元素相对于视窗的位置集合
+				var scaleX = canvas.width / rect.width; // 水平方向的缩放因子
+				var scaleY = canvas.height / rect.height; // 垂直方向的缩放因子
+
+				cmousex = (e.clientX - rect.left - ctransx) / scale; // 计算相对x坐标
+				cmousey = (e.clientY - rect.top - ctransy) / scale; // 计算相对y坐标
 			    if (isDragging) {
 				    const dx = e.offsetX - startX;
 				    const dy = e.offsetY - startY;
 				    ctx.translate(dx, dy);
+					ctransx += dx * scale;
+					ctransy += dy * scale;
 				    startX = e.offsetX;
 				    startY = e.offsetY;
 				    systemRedraw();
@@ -346,6 +362,8 @@
 			    const mouseX = e.offsetX;
 			    const mouseY = e.offsetY;
 			    ctx.translate(mouseX, mouseY);
+				ctransx += mouseX * scale;
+				ctransy += mouseY * scale;
 			    if (e.deltaY < 0) {
 			        scale *= scaleFactor;
 			        ctx.scale(scaleFactor, scaleFactor);
@@ -355,6 +373,8 @@
 			    }
 			    
 			    ctx.translate(-mouseX, -mouseY);
+				ctransx -= mouseX * scale;
+				ctransy -= mouseY * scale;
 			    systemRedraw();
 		    });
 	    };
