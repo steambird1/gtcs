@@ -23,7 +23,8 @@ DCTR="http://127.0.0.1:5033/zugdist"
 BCTR="http://127.0.0.1:5033/befehl"
 LCTR="http://127.0.0.1:5033/lkjdisp"
 ICTR="http://127.0.0.1:5033/signaldata"
-ZUGNAME="zug1"
+TCTR="http://127.0.0.1:5033/trainop"
+ZUGNAME="IC_1"
 SCHUTZ_SIMU=True
 SCHUTZ_PROB=1
 DARK=True
@@ -346,6 +347,7 @@ def render_route_tackle(csp, cx, cy):
     elif csp[1] == "S":
         # Draw signal lights, status represent at csp[3]:
         #routedisp.pencolor(MYWHITE)
+        zud = 10
         if LEVEL <= 2:
             routedisp.fillcolor('white')
             routedisp.begin_fill()
@@ -386,13 +388,28 @@ def render_route_tackle(csp, cx, cy):
                 if curspeed > int(csp[3])*10:
                     routedisp.pencolor('orange')
                 routedisp.write("Hp " + csp[3] + "0", align='right', font=FONT)
+                zud = 20
+            elif csp[3] == "-":
+                routedisp.fillcolor('yellow')
+                routedisp.begin_fill()
+                routedisp.circle(3)
+                routedisp.end_fill()
+                routedisp.goto(cx - 6, cy)
+                routedisp.fillcolor('red')
+                routedisp.begin_fill()
+                routedisp.circle(3)
+                routedisp.end_fill()
+                routedisp.goto(cx - 10, cy)
+                if len(csp) >= 5 and csp[4].isdigit():
+                    routedisp.write(csp[4], align='right', font=FONT)
+                zud = 20
             else:
                 routedisp.fillcolor('red')
                 routedisp.begin_fill()
                 routedisp.circle(3)
                 routedisp.end_fill()
         if show_name:
-            routedisp.goto(cx-10, cy)
+            routedisp.goto(cx-zud, cy)
             routedisp.pencolor(MYBLUE)
             routedisp.write(csp[2], align='right', font=FONT)
     elif csp[1] == "P0":
@@ -1169,7 +1186,7 @@ def schutz_broadcast(info):
 
 
 def console():
-    global SCHUTZ_PROB, SCHUTZ_SIMU, SCTR, ZCTR, DCTR, BCTR, LCTR, ICTR, GLOGGING, PLOGGING, plog, ZUGNAME, spdlim, zugat, gtcsinfo, accreq, acreqspd, thrust, power, accuer, LEVEL, g3err, autog3, failures
+    global SCHUTZ_PROB, SCHUTZ_SIMU, SCTR, ZCTR, DCTR, BCTR, LCTR, ICTR, TCTR, GLOGGING, PLOGGING, plog, ZUGNAME, spdlim, zugat, gtcsinfo, accreq, acreqspd, thrust, power, accuer, LEVEL, g3err, autog3, failures
     while True:
         ip = input(">>> ")
         cmd = ip.split(" ")
@@ -1187,7 +1204,7 @@ def console():
             if len(cmd) < 2:
                 print("Current name",ZUGNAME)
                 continue
-            ZUGNAME = cmd[1]
+            ZUGNAME = " ".join(cmd[1:])
             print("Successfully updated name")
         elif cmd[0] == "gi":
             if len(cmd) < 2:
@@ -1257,6 +1274,7 @@ def console():
             BCTR="http://{ip}:5033/befehl".format(ip=cmd[1])
             LCTR="http://{ip}:5033/lkjdisp".format(ip=cmd[1])
             ICTR="http://{ip}:5033/signaldata".format(ip=cmd[1])
+            TCTR="http://{ip}:5033/trainop".format(ip=cmd[1])
         elif cmd[0] == "schutz":
             if len(cmd) < 2:
                 SCHUTZ_SIMU = not SCHUTZ_SIMU
@@ -1491,7 +1509,7 @@ def logclr():
         
 
 def befread():
-    global g3err, BCTR, AUTH, befehltext, befconf, ZUGNAME
+    global g3err, BCTR, TCTR, AUTH, befehltext, befconf, ZUGNAME
     while True:
         try:
             u = urlopen(BCTR + "?auth=" + AUTH + "&mode=get&name=" + ZUGNAME)
@@ -1510,6 +1528,12 @@ def befread():
                 befshow()
         except Exception as e:
             g3err.append(time.ctime() + " GTCS Befehl: " + str(e))
+        try:
+            u = urlopen(TCTR + "?mode=submit&auth=" + AUTH + "&name=" + ZUGNAME + "&spd=120&vist=" + str(
+                int(curspeed)) + "&sname=" + zugat + "&dev=" + str(int(accuer)))
+            u.close()
+        except Exception as e:
+            g3err.append(time.ctime() + " GTCS Befehl Submit: " + str(e))
         time.sleep(2)
 
 def gsmgmt():
@@ -1595,9 +1619,17 @@ def afb():
             if (LEVEL >= 3) and (zusatz_spdlim_at < 1000):
                 csmin = min(csmin, zusatz_spdlim)
             acceldata = caccel * 5 / 3.6
-            if (accreq >= 0) or (LEVEL > 1 and nextdist >= 4000 and accreq > -0.05):
+            minperm = 0
+            if LEVEL >= 2:
+                if nextdist >= 150:
+                    if nextdist <= 200:
+                        minperm = 15
+                    elif nextdist <= 500:
+                        minperm = 25
+                    elif nextdist <= 1000:
+                        minperm = 40
+            if (accreq >= 0) or (LEVEL > 1 and accreq > -0.05) or (((accreq > -1.35) and (curspeed < minperm - 5))):
                 # plog.append(time.ctime() + " AFB Level 1")
-
                 if (csmin - 10) - (curspeed) > 60:
                     if abs(acceldata - 1) > 0.05 or abs(thrust - 100) > 5:
                         if (acceldata < 1) and (thrust < 100):
@@ -1605,14 +1637,14 @@ def afb():
                         elif (acceldata > 1.05) or (thrust > 105):
                             kdn(True)
                     time.sleep(0.02)
-                elif curspeed < (csmin - 10):
+                elif (curspeed < (csmin - 10)) or (curspeed < minperm - 5):
                     if abs(acceldata - 0.5) > 0.05 or abs(thrust - 20) > 5:
-                        if (acceldata < 0.5) and (thrust < 20):
+                        if ((acceldata < 0.5) and (thrust < 20)):
                             kup(True)
                         elif (acceldata > 0.55) or (thrust > 25):
                             kdn(True)
                     time.sleep(0.02)
-                elif curspeed < csmin:
+                elif (curspeed < csmin) and (curspeed > minperm):
                     if thrust <= -2:
                         kup(True)
                     elif thrust >= 2:
@@ -1626,7 +1658,7 @@ def afb():
                     time.sleep(0.05)
             elif (accreq < -0.1):
                 # plog.append(time.ctime() + " AFB Level 0")
-                if abs(acceldata - accreq) > 0.05:
+                if (abs(acceldata - accreq) > 0.05):
                     if accreq < acceldata:
                         kdn(True)
                     elif accreq > acceldata + 0.05:
