@@ -6,20 +6,28 @@ import io
 import hashlib
 from PIL import Image
 import urllib
+import random
+import datetime
 
 app = Flask("FountaineMTR")
 
+PROHIBIT = "x"
 RED = "0"
+REDYELLOW = "-"
 GREEN = "."
 WARNING = "/"
 PREWARNING = "|"
 ERROR = "?"
+
+DANGEROUS = ["0", "-", "x", "?"]
 
 ZOOM = 250
 SEED = 616
 SEED2 = 12312345
 SEED3 = 45645612
 SEED4 = 11451419198
+
+SIMU_TRAIN = True
 
 # To generate terrains.
 # [lower, upper)
@@ -32,9 +40,28 @@ def randz(lower, upper):
 # KLine graph
 signals = {}
 addinfos = {}
+
+translation = {}
+
+RED_AWAIT = 60
+
+manuals = {}
+red_bars = []
+red_timer = {}
+red_at_exit = []
+with_train = {}
 #for i in range(10):
 #    signals["z" + str(i)] = [[0, (i-5)*50], [0, (i-6)*50], GREEN, ["z" + str(i+1)], 0]
 #signals["z10"] = [[0, 200], [0, 300], GREEN, [], 0]
+
+# [Name: from, to, speed, signal, dev, auto]
+# (for no train occupied: signals at red will be set to green after 1 min, with speed limit 60 km/h)
+# diverging track will be configured (through dijkstra)
+# (automatic information will be added as well)
+# TODO: Add /zug processor !!!
+# TODO: Train simulator not done
+trains = {}
+zeitplan = {}
 
 def getmd5(s):
     return hashlib.md5(s.encode('utf-8')).hexdigest()
@@ -94,11 +121,12 @@ def getlatest(name):
     global sids
     return name+str(sids[name])
 
-def addstation(name,station,sxd,syd,mxd,myd,dn=""):
-    global sids, signals
+def addstation(name,station,sxd,syd,mxd,myd,dn="",tr=""):
+    global sids, signals, red_at_exit, translation
     cstat = signals[getlatest(name)]
     ent = name + "_" + station + "_ent"
     ext = name + "_" + station + "_ext"
+    red_at_exit.append(ext)
     signals[getlatest(name)][3].insert(0,ent)
     signals[ent] = [cstat[0],[cstat[0][0]+sxd,cstat[0][1]+syd],GREEN,[ext],0]
     signals[ent][3].append(getlatest(name))
@@ -106,7 +134,10 @@ def addstation(name,station,sxd,syd,mxd,myd,dn=""):
     if dn != "":
         signals[ent][3].append(dn + "_" + station + "_ext")
     signals[ext] = [[cstat[0][0]+mxd,cstat[0][1]+myd],[cstat[0][0]+sxd+mxd,cstat[0][1]+syd+myd],RED,[ent,name+str(sids[name])],1]
-    signals[name+str(sids[name])] = [[cstat[0][0]+sxd+mxd,cstat[0][1]+syd+myd],[cstat[0][0]+(sxd*2)+mxd,cstat[0][1]+(syd*2)+myd],RED,[ext],0]
+    signals[name+str(sids[name])] = [[cstat[0][0]+sxd+mxd,cstat[0][1]+syd+myd],[cstat[0][0]+(sxd*2)+mxd,cstat[0][1]+(syd*2)+myd],"6",[ext],0]
+    if tr != "":
+        translation[ext] = tr
+        translation[dn + "_" + station + "_ext"] = tr
 """
 draw_line("C",-80,120,-30,60,10)
 draw_line("C",-30,60,-30,-60,10)
@@ -134,23 +165,23 @@ signals["M_lyg_gleis3_ext"] = [[-5, -200], [-5, -205], RED, ["M_lyg_gleis3_ent",
 signals["M_lyg_gleis4_ent"] = [[-5, -205], [-5, -210], GREEN, ["M_lyg_gleis4_ext", "M_lyg_gleis3_ext"], 0]
 signals["M_lyg_gleis4_ext"] = [[-5, -210], [-5, -215], RED, ["M_lyg_gleis4_ent", "M_lyg_gleis3_ent", "S_up1"], 2]
 
-addstation("M_up","lyg",0,2,0,3,"M_dn")
+addstation("M_up","lyg",0,2,0,3,"M_dn","Liyue")
 #report_line()
 draw_line("M_up",0,-200,0,-140,5)
-addstation("M_up","gly",0,2,0,3,"M_dn")
+addstation("M_up","gly",0,2,0,3,"M_dn","Guiliyuan")
 #report_line()
 draw_line("M_up",0,-130,0,-90,5)
-addstation("M_up","ws",0,2,0,3,"M_dn")
+addstation("M_up","ws",0,2,0,3,"M_dn","Wangshu")
 draw_line("M_up",0,-80,0,-30,5)
-addstation("M_up","dhz",0,2,0,3,"M_dn")
+addstation("M_up","dhz",0,2,0,3,"M_dn","Dihuazhou")
 draw_line("M_up",0,-20,0,20,5)
-addstation("M_up","sm_stonetur",0,2,0,3,"M_dn")
+addstation("M_up","sm_stonetur",0,2,0,3,"M_dn","Steintur (am Liyue)")
 draw_line("M_up",0,30,50,80,5)
-addstation("M_up","Morganstadt",2,2,3,3,"M_dn")
+addstation("M_up","Morganstadt",2,2,3,3,"M_dn","Morganstadt")
 draw_line("M_up",60,90,120,150,5)
-addstation("M_up","Quessw",2,2,3,3,"M_dn")
+addstation("M_up","Quessw",2,2,3,3,"M_dn","Quellswasser")
 draw_line("M_up",130,160,130,220,5)
-addstation("M_up","Mondstadt",0,2,0,3,"M_dn")
+addstation("M_up","Mondstadt",0,2,0,3,"M_dn","Mondstadt")
 
 draw_line("M_dn",120,225,120,220,-5)
 addstation("M_dn","Mondstadt",0,-2,0,-3,"M_up")
@@ -173,11 +204,11 @@ signals["M_up2"][3].append("M_upt_lyg")
 signals["M_dn79"][3].append("M_dnt_lyg")
 
 draw_line("V_up",130,160,200,160,5)
-addstation("V_up", "Sternfall", 2, 0, 3, 0, "V_dn")
+addstation("V_up", "Sternfall", 2, 0, 3, 0, "V_dn", "Sternfall")
 draw_line("V_up",205,160,245,200,5)
-addstation("V_up", "Windsehenberg", 0, 2, 0, 3, "V_dn")
+addstation("V_up", "Windsehenberg", 0, 2, 0, 3, "V_dn", "Windsehenberg")
 draw_line("V_up",245,205,310,270,5)
-addstation("V_up", "Dandelions", 0, 2, 0, 3, "V_dn")
+addstation("V_up", "Dandelions", 0, 2, 0, 3, "V_dn", "Dandelions")
 draw_line("V_dn",320,280,315,275,-5)
 addstation("V_dn", "Dandelions", 0, -2, 0, -3, "V_up")
 draw_line("V_dn",310,270,245,205,-5)
@@ -191,9 +222,9 @@ signals[getlatest("V_dn")][3].append("M_dn_Quessw_ent")
 signals[getlatest("V_dn")][4] = 1
 
 draw_line("S_up",-5,-205,-50,-250,-5)
-addstation("S_up", "Chasm", -2, -2, -3, -3, "S_dn")
+addstation("S_up", "Chasm", -2, -2, -3, -3, "S_dn", "Chasm")
 draw_line("S_up",-55,-260,-155,-260,-5)
-addstation("S_up", "Sumeru", -2, 0, -3, 0, "S_dn")
+addstation("S_up", "Sumeru", -2, 0, -3, 0, "S_dn", "Sumeru")
 draw_line("S_dn",-160,-265,-155,-260,5)
 addstation("S_dn", "Sumeru", 2, 0, 3, 0, "S_up")
 draw_line("S_dn",-155,-255,-55,-255,5)
@@ -233,7 +264,7 @@ generate_for("S_up",8,20,6,15)
 generate_for("S_dn",8,20,6,15)
 
 draw_line("F_up",-5,-205,-805,605,5)
-addstation("F_up", "Fountaine", -2, 0, 3, 0, "F_dn")
+addstation("F_up", "Fountaine", -2, 0, 3, 0, "F_dn", "Fountaine")
 draw_line("F_dn",-810,610,-805,605,-5)
 addstation("F_dn", "Fountaine", 2, 0, -3, 0, "F_up")
 draw_line("F_dn",-800,600,-5,-205,-5)
@@ -317,7 +348,7 @@ def signal():
 NORMREFDIST = 4500
 
 def sdscan(sname,cdist=0,refdist=4500):
-    global addinfos, signals, ZOOM
+    global addinfos, signals, ZOOM, red_timer
     if refdist < 0:
         return []
     ctmp = []
@@ -327,7 +358,10 @@ def sdscan(sname,cdist=0,refdist=4500):
     cl = length(sname) * ZOOM
     if signals[sname][4] < len(signals[sname][3]):
         sgt = signals[sname][3][signals[sname][4]]
-        ctmp.append([str(int(cdist+cl)), "S " + sgt + " " + str(signals[sgt][2])])
+        addins = ""
+        if (sgt in red_timer) and (red_timer[sgt][2]):
+            addins = " " + str(red_timer[sgt][1])
+        ctmp.append([str(int(cdist+cl)), "S " + sgt + " " + str(signals[sgt][2]) + addins])
         ctmp += sdscan(sgt, cdist + cl, refdist - cl)
     return ctmp
 
@@ -550,15 +584,8 @@ def zugdist():
     zs = zugscan(curpos,curlim)
     return str(int(zs[0]*ZOOM - int(curkilo))) + " " + zs[1] + " " + zs[2] + " " + newname(curpos, int(curkilo)/ZOOM)
 
-@app.route("/diverg")
-def diverging():
-    global signals, CTRL_AUTH
-    if not check_auth(request.args.get("auth"), CTRL_AUTH):
-        return ERROR
-    sname = request.args.get("sid")
-    if sname not in signals:
-        return RED
-    stgt = request.args.get("stat")
+def divergcall(sname, stgt):
+    global signals, defaults
     if stgt not in signals[sname][3]:
         return RED
     signals[sname][4] = signals[sname][3].index(stgt)
@@ -572,9 +599,20 @@ def diverging():
         signals[sname][2] = '.'
         return '.'
 
+@app.route("/diverg")
+def diverging():
+    global signals, CTRL_AUTH
+    if not check_auth(request.args.get("auth"), CTRL_AUTH):
+        return ERROR
+    sname = request.args.get("sid")
+    if sname not in signals:
+        return RED
+    stgt = request.args.get("stat")
+    return divergcall(sname, stgt)
+
 @app.route("/signalset")
 def signalset():
-    global signals, CTRL_AUTH
+    global signals, originals, manuals, CTRL_AUTH
     if not check_auth(request.args.get("auth"), CTRL_AUTH):
         return ERROR
     sname = request.args.get("sid")
@@ -582,12 +620,63 @@ def signalset():
         return RED
     sstat = request.args.get("stat")
     signals[sname][2] = sstat
+    originals[sname] = sstat
+    if sstat not in DANGEROUS:
+        manuals[sname] = sstat
     #update_signal(sname)
     return sstat
 
+def zugcall(sname, state, zugid):
+    global signals, warninfo, red_at_exit, TRAIN_AUTH, WARNING, PREWARNING
+    if state == "0":
+        if signals[sname][2] == RED:
+            warninfo += "<p style=\"color: red;\">[Alert] Train " + zugid + " passing Danger signal</p>\n"
+        if not with_train[sname]:
+            originals[sname] = signals[sname][2]
+        signals[sname][2] = RED
+        with_train[sname] = True
+        zugin[sname] = zugid
+        if sname in prev:
+            ps = prev[sname]
+            if not with_train[ps]:
+                originals[ps] = signals[ps][2]
+            if translate(signals[ps][2]) > translate(WARNING):
+                signals[ps][2] = WARNING
+            with_train[ps] = True
+            if ps in prev:
+                pps = prev[ps]
+                if not with_train[pps]:
+                    originals[pps] = signals[pps][2]
+                with_train[pps] = True
+                if translate(signals[pps][2]) > translate(PREWARNING):
+                    signals[pps][2] = PREWARNING
+        return RED
+    elif state == "1":
+        flag = True
+        if zugin[sname] != zugid:
+            warninfo += "<p style=\"color: orange;\">[Warning] Train " + zugid + " not entering " + sname + ", but exiting. It should have been '" + str(zugin[sname]) + "'.</p>\n"
+            flag = False
+        if flag and (sname in originals) and (sname not in red_at_exit):
+            signals[sname][2] = originals[sname]
+        with_train[sname] = False
+        if sname in prev:
+            ps = prev[sname]
+            with_train[ps] = False
+            if flag and (ps in originals):
+                signals[ps][2] = originals[ps]
+            if ps in prev:
+                pps = prev[ps]
+                with_train[pps] = False
+                if flag and (pps in originals):
+                    signals[pps][2] = originals[pps]
+        zugin[sname] = ""
+        return signals[sname][2]
+    else:
+        return RED
+
 @app.route("/zug")
 def zug():
-    global signals, warninfo, TRAIN_AUTH, WARNING, PREWARNING
+    global signals, warninfo, red_at_exit, TRAIN_AUTH, WARNING, PREWARNING
     if not check_auth(request.args.get("auth"), TRAIN_AUTH):
         return ERROR
     sname = request.args.get("sid")
@@ -596,39 +685,7 @@ def zug():
     state = request.args.get("type")
     zugid = request.args.get("name")
     # 0 : in, 1 : out
-    if state == "0":
-        if signals[sname][2] == RED:
-            warninfo += "<p style=\"color: red;\">[Alert] Train " + zugid + " entering occupied track</p>\n"
-        originals[sname] = signals[sname][2]
-        signals[sname][2] = RED
-        zugin[sname] = zugid
-        if sname in prev:
-            ps = prev[sname]
-            originals[ps] = signals[ps][2]
-            signals[ps][2] = WARNING
-            if ps in prev:
-                pps = prev[ps]
-                originals[pps] = signals[pps][2]
-                signals[pps][2] = PREWARNING
-        return RED
-    elif state == "1":
-        if zugin[sname] != zugid:
-            warninfo += "<p style=\"color: orange;\">[Warning] Train " + zugid + " not entering " + sname + ", but exiting</p>\n"
-            return RED
-        if sname in originals:
-            signals[sname][2] = originals[sname]
-        if sname in prev:
-            ps = prev[sname]
-            if ps in originals:
-                signals[ps][2] = originals[ps]
-                if ps in prev:
-                    pps = prev[ps]
-                    if pps in originals:
-                        signals[pps][2] = originals[pps]
-        zugin[sname] = ""
-        return signals[sname][2]
-    else:
-        return RED
+    return zugcall(sname, state, zugid)
 
 graph_done = False
 curerr = ""
@@ -772,6 +829,241 @@ def imgupd():
         print(curerr)
     turtle.ontimer(imgupd, 1000)
 
+def red_tackle():
+    global signals, red_timer, manuals
+    while True:
+        try:
+            for i in signals:
+                if signals[i][2] == REDYELLOW:
+                    if (i not in red_timer) or (not red_timer[i][2]):
+                        red_timer[i] = [0, RED_AWAIT, True]
+                    elif red_timer[i][2]:
+                        red_timer[i][1] -= 1
+                        #print("Ticking for red-yellow", i, red_timer[i])
+                        if red_timer[i][1] <= 0:
+                            #print("Ticking ended.")
+                            red_timer[i][2] = False
+                            if i in manuals:
+                                signals[i][2] = manuals[i]
+                            else:
+                                signals[i][2] = GREEN
+                            # Report signal modification here for transition
+                elif (i in red_timer) and (red_timer[i][2]):
+                    red_timer[i][0] += 1
+                    red_timer[i][1] -= 1
+                    if red_timer[i][1] <= 0 or red_timer[i][0] >= 10:
+                        red_timer[i][2] = False
+        except Exception as e:
+            print(e)
+        time.sleep(1)
+
+TS_DENSITY = 500
+
+@app.route("/trainview")
+def trainsview():
+    global trains, translation, zeitplan
+    if "pax" in request.args:
+        tdata = []
+        for i in trains:
+            if trains[i][1] == "" or trains[i][4] == "":
+                tj = ([], (10**8))
+            tj = train_dijkstra(trains[i][4], trains[i][1])
+            if (request.args.get("pax") == "open") or (request.args.get("pax") in tj[0]):
+                etd = datetime.timedelta(hours=(tj[1] / 1000) / (0.75 * trains[i][2]))
+                eta = datetime.datetime.now() + etd
+                einfo = "On Schuedule"
+                if i not in zeitplan:
+                    zeitplan[i] = eta
+                elif (eta - zeitplan[i]) > datetime.timedelta(hours=1):
+                    einfo = '<span style="color: red; font-weight: 700;">Delayed</span>'
+                elif (eta - zeitplan[i]) > datetime.timedelta(minutes=5):
+                    einfo = '<span style="color: orange; font-weight: 700;">Delayed for {} minutes</span>'.format(str(int((eta - zeitplan[i]).total_seconds() / 60)))
+                tdata.append([i, (translation[trains[i][1]] if trains[i][1] in translation else "--"), (zeitplan[i].strftime("%H:%M")), einfo])
+        return render_template("paxinner.html", tdata=tdata)
+    else:
+        return render_template("trainview.html", trains=trains, round=round)
+
+@app.route("/staffview")
+def staffview():
+    return render_template("staffview.html")
+
+@app.route("/paxview")
+def paxview():
+    return render_template("paxview.html")
+
+@app.route("/trainop")
+def trainop():
+    global trains, TRAIN_AUTH, CTRL_AUTH
+    # TODO: Not implemented now
+    mode = request.args.get("mode")
+    if mode == "update":
+        if not check_auth(request.args.get("auth"), CTRL_AUTH):
+            return "Operation not permitted", 400
+        name = request.args.get("name")
+        von = request.args.get("von")
+        nach = request.args.get("nach")
+        v = request.args.get("spd")
+        divg = "0"
+        if "autodv" in request.args:
+            divg = request.args.get("autodv")
+        if name not in trains:
+            trains[name] = [von, nach, int(v), 0, von, 0, True, divg.strip() == "1"]
+        else:
+            trains[name][0] = von
+            trains[name][1] = nach
+            trains[name][2] = int(v)
+            trains[name][7] = divg.strip() == "1"
+        return "OK"
+    elif mode == "submit":
+        if not check_auth(request.args.get("auth"), TRAIN_AUTH):
+            return "Operation not permitted", 400
+        name = request.args.get("name").replace("_", " ")
+        v = request.args.get("spd")
+        cv = request.args.get("vist")
+        loc = request.args.get("sname")
+        dev = request.args.get("dev")
+        if name not in trains:
+            trains[name] = ["", "", int(v), int(cv), loc, int(dev), False, False]
+        else:
+            trains[name][2] = int(v)
+            trains[name][3] = int(cv)
+            trains[name][4] = loc
+            trains[name][5] = int(dev)
+        return "OK"
+    return "Invalid operation", 500
+
+# Return potential track, O(n^2)
+def train_dijkstra(von, nach, pass_red=False, max_len=(10**8)):
+    global signals, ZOOM
+    #print("Execute dijkstra",von,nach)
+    dis = {von:0}
+    dvon = {von:""}
+    vis = set()
+    for i in range(len(signals)):
+        cmin = max_len
+        cmname = ""
+        for j in dis:
+            if (signals[j][2] != PROHIBIT) and (pass_red or (signals[j][2] != RED)) and (j not in vis) and (dis[j] < cmin):
+                cmin = dis[j]
+                cmname = j
+        if cmname == "":
+            break
+        vis.add(cmname)
+        cmin = cmin + length(cmname) * ZOOM
+        cid = 0
+        for j in signals[cmname][3]:
+            cext = 0
+            if cid != defaults[cmname]:
+                cext = length(cmname) * ZOOM
+            if (j not in dis) or ((cmin + cext) < dis[j]):
+                dis[j] = cmin + cext
+                dvon[j] = cmname
+            cid += 1
+    if nach not in dis:
+        return ([], (10**8))
+    track = [nach]
+    cur = nach
+    while cur != von:
+        track.append(dvon[cur])
+        cur = dvon[cur]
+    return (track[::-1], dis[nach])
+
+TMAX = 15
+
+def tsimu():
+    global trains, ZOOM, zeitplan
+    termcnt = 0
+    while True:
+        # Generation
+        print("Tick train simulator,",termcnt,"train(s) has ever arrived")
+        ct = time.time()
+        if (random.randint(1, 1000) <= TS_DENSITY) and (len(trains) < TMAX):
+            mode = random.choice(["IC", "ICE", "RE", "G", "D", "Z", "T", "K"])
+            vsoll = 120
+            if mode in ["ICE", "G", "D"]:
+                vsoll = 240
+            von = ""
+            while (von.strip() == "") or ((von in zugin) and (zugin[von].strip() != "")):
+                von = random.choice(red_at_exit)
+            # Maybe use ent???
+            nach = random.choice(red_at_exit)
+            sid = random.randint(1, 1000)
+            zname = mode + " " + str(sid)
+            if translate(signals[von][2]) <= 0:
+                signals[von][2] = "-"
+            zugin[von] = zname
+            trains[zname] = [von, nach, vsoll, 0, von, 0, True, True]
+            rlen = train_dijkstra(von, nach)[1]
+            zeitplan[zname] = datetime.datetime.now() + datetime.timedelta(hours=((rlen / 1000) / (0.75 * vsoll)))
+
+        # Normal operation for all trains
+        try:
+            for i in trains:
+                vziel = 0
+                future = ""
+                try:
+                    future = signals[trains[i][4]][3][signals[trains[i][4]][4]]
+                    vziel = min(translate(signals[future][2]), trains[i][2])
+                except Exception as e:
+                    print("Train processor error", str(e))
+                if trains[i][6]:
+                    if trains[i][3] >= vziel + 40:
+                        trains[i][3] -= random.randint(155,205) / 10
+                    elif trains[i][3] >= vziel:
+                        trains[i][3] -= random.randint(45, 55) / 10
+                    elif trains[i][3] < vziel - 10:
+                        trains[i][3] += random.randint(30, 40) / 10
+                    elif trains[i][3] < vziel:
+                        trains[i][3] += random.randint(-5, 5) / 10
+                    if trains[i][3] < 0:
+                        trains[i][3] = 0
+                    trains[i][5] += trains[i][3] / 3.6
+                    clen = length(trains[i][4]) * ZOOM
+                    done = False
+                    while trains[i][5] >= clen and (future in signals):
+                        zugcall(trains[i][4], "1", i)
+                        trains[i][5] -= clen
+                        trains[i][4] = future
+                        if trains[i][4] == trains[i][1]:
+                            trains.pop(i)
+                            done = True
+                            print("End of train career",i)
+                            termcnt += 1
+                            break
+                        # TODO: CALL OF ENTER HERE IS INCORRECT ?
+                        zugcall(future, "0", i)
+                        future = signals[future][3][signals[future][4]]
+                        clen = length(trains[i][4]) * ZOOM
+                    if done:
+                        continue
+                if trains[i][7] and (trains[i][1] in signals) and (trains[i][4] in signals):
+                    route = train_dijkstra(trains[i][4], trains[i][1], True)[0]
+                    #print("Attempt for diverg",i,"path",route[:3])
+                    #print("Process auto diverging",i,"with","actual",signals[route[1]][3][signals[route[1]][4]],"ideal",route[2])
+                    if len(route) > 1:
+                        if (signals[route[0]][3][signals[route[0]][4]] != route[1]):
+                            divergcall(route[0], route[1])
+                        if (len(route) > 2) and (signals[route[1]][3][signals[route[1]][4]] != route[2]):
+                            originals[route[1]] = signals[route[1]][2]
+                            signals[route[1]][2] = "0"
+                            # Report signal mod !!!
+                            #print(i,":Checking diverging condition: present next:",signals[route[1]][3][signals[route[1]][4]],"prev:",route[0],"hope:",route[2])
+                            if (signals[route[1]][3][signals[route[1]][4]] == route[0]) or (not ((route[1] in zugin) and (zugin[route[1]] != "") and (zugin[route[1]] != i))):
+                                try:
+                                    #signals[route[1]][3][signals[route[1]][4]] = signals[route[1]][3].index(route[2])
+                                    signals[route[1]][2] = originals[route[1]]
+                                    divergcall(route[1], route[2])
+                                    # Report signal mod !!!
+                                except Exception as e:
+                                    print("Unable to configure diverging track", str(e))
+                        elif (signals[route[1]][2] in [RED, REDYELLOW]) and ((route[1] not in zugin) or (zugin[route[1]] == "") or (zugin[route[1]] == i)):
+                            signals[route[1]][2] = "-"
+                            # Report signal mod !!!
+        except Exception as e:
+            print("Error",str(e))
+        while time.time() < (ct+1):
+            time.sleep(0.05)
+
 if __name__ == '__main__':
     for i in signals:
         scan_signal(i)
@@ -780,8 +1072,13 @@ if __name__ == '__main__':
         if i not in addinfos:
             #print("Addinfo assist",i)
             addinfos[i] = []
+        with_train[i] = False
     t = threading.Thread(target=ar)
     t.start()
+    tr = threading.Thread(target=red_tackle)
+    tr.start()
+    ts = threading.Thread(target=tsimu)
+    ts.start()
     print("Graphics start")
     turtle.ontimer(imgupd, 1000)
     turtle.mainloop()
