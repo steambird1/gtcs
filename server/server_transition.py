@@ -1005,7 +1005,8 @@ def trainsview():
         for i in trains:
             if trains[i][1] == "" or trains[i][4] == "":
                 tj = ([], (10**8))
-            tj = train_dijkstra(trains[i][4], trains[i][1])
+            else:
+                tj = train_dijkstra(trains[i][4], trains[i][1], True)
             if (request.args.get("pax") == "open") or (request.args.get("pax") in tj[0]):
                 etd = datetime.timedelta(hours=(tj[1] / 1000) / (0.75 * trains[i][2]))
                 eta = datetime.datetime.now() + etd
@@ -1071,7 +1072,7 @@ def trainop():
     return "Invalid operation", 500
 
 # Return potential track, O(n^2)
-def train_dijkstra(von, nach, pass_red=False, max_len=(10**8)):
+def train_dijkstra(von, nach, pass_red=False, max_len=(10**9)):
     global signals, ZOOM
     #print("Execute dijkstra",von,nach)
     dis = {von:0}
@@ -1098,7 +1099,8 @@ def train_dijkstra(von, nach, pass_red=False, max_len=(10**8)):
                 dvon[j] = cmname
             cid += 1
     if nach not in dis:
-        return ([], (10**8))
+        print("TDJ: No route from",von,"to",nach)
+        return ([], max_len)
     track = [nach]
     cur = nach
     while cur != von:
@@ -1111,9 +1113,12 @@ TMAX = 15
 def tsimu():
     global trains, ZOOM, zeitplan
     termcnt = 0
+    idle = 0
+    lastcall = time.time()
     while True:
         # Generation
-        print("Tick train simulator,",termcnt,"train(s) has ever arrived")
+        print("Tick train simulator,",termcnt,"train(s) has ever arrived","| Last idle:",idle)
+        idle = 0
         ct = time.time()
         if (random.randint(1, 1000) <= TS_DENSITY) and (len(trains) < TMAX):
             mode = random.choice(["IC", "ICE", "RE", "G", "D", "Z", "T", "K"])
@@ -1131,7 +1136,7 @@ def tsimu():
                 signals[von][2] = "-"
             zugin[von] = zname
             trains[zname] = [von, nach, vsoll, 0, von, 0, True, True]
-            rlen = train_dijkstra(von, nach)[1]
+            rlen = train_dijkstra(von, nach, True)[1]
             zeitplan[zname] = datetime.datetime.now() + datetime.timedelta(hours=((rlen / 1000) / (0.75 * vsoll)))
 
         # Normal operation for all trains
@@ -1155,7 +1160,7 @@ def tsimu():
                         trains[i][3] += random.randint(-5, 5) / 10
                     if trains[i][3] < 0:
                         trains[i][3] = 0
-                    trains[i][5] += trains[i][3] / 3.6
+                    trains[i][5] += (trains[i][3] / 3.6) * (time.time() - lastcall)
                     clen = length(trains[i][4]) * ZOOM
                     done = False
                     while trains[i][5] >= clen and (future in signals):
@@ -1198,6 +1203,7 @@ def tsimu():
                             report_signal_mod(route[1])
         except Exception as e:
             print("Error",str(e))
+        lastcall = time.time()
         while time.time() < (ct+1):
             time.sleep(0.05)
 
