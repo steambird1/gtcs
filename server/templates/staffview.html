@@ -1,0 +1,46 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <title>Train Management</title>
+    <script>
+        setInterval(function() {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/trainview');
+            xhr.send(null);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState == 4) {
+                    document.getElementById('trainview').innerHTML = xhr.responseText;
+                }
+            }
+        }, 1000);
+    </script>
+</head>
+<body>
+    <div id="trainview">
+
+    </div>
+    <div>
+        <!-- Processor -->
+        <form action="/trainop" method="GET" target="_blank">
+            <input type="hidden" name="mode" value="update" />
+            <span>Password:</span>
+            <input type="password" name="auth" />
+            <hr />
+            <span>Train name:</span>
+            <input type="text" name="name" />
+            <br />
+            <span>From:</span>
+            <input type="text" name="von" />
+            <span>&nbsp;&nbsp;To:</span>
+            <input type="text" name="nach" />
+            <br />
+            <span>v-soll:</span>
+            <input type="text" name="spd" />
+            <span>&nbsp;&nbsp;Auto diverging:</span>
+            <input type="checkbox" name="autodv" value="1" />
+            <hr />
+            <input type="submit" />
+        </form>
+    </div>
+</body>
+</html>

@@ -1,0 +1,26 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+	<title>Passenger View</title>
+	<script>
+		setInterval(function() {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/trainview?pax=' + document.getElementById('loc').value);
+            xhr.send(null);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState == 4) {
+                    document.getElementById('trainview').innerHTML = xhr.responseText;
+                }
+            }
+        }, 1000);
+	</script>
+</head>
+<body>
+	<span>Location:</span>
+	<input type="text" id="loc" value="open" />
+	<hr />
+	<div id="trainview">
+
+    </div>
+</body>
+</html>

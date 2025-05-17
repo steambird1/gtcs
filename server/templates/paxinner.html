@@ -1,0 +1,18 @@
+
+<!-- To implement modifier -->
+<table>
+    <tr>
+        <th>Train</th>
+        <th>To</th>
+        <th>Estimated Arrival at</th>
+        <th>Status</th>
+    </tr>
+	{% for i in tdata %}
+    <tr>
+		<td>{{ i[0] }}</td>
+		<td>{{ i[1] }}</td>
+		<td>{{ i[2] }}</td>
+		<td>{{ i[3] | safe }}</td>
+	</tr>
+	{% endfor %}
+</table>

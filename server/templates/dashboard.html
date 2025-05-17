@@ -83,7 +83,9 @@
 			    //if (csc != 'green' || crt[8] != "*") {
 			    //}
 				if (cmousex >= Math.min(xb,xe) && cmousex <= Math.max(xb,xe) && cmousey >= Math.min(yb,ye) && cmousey <= Math.max(yb,ye)) {
-					cv.fillText(crt[0] + ": " + crt[5] + " & " + crt[8], (xb+xe)/2, (yb+ye)/2);
+					let zu = "";
+					if (crt.length >= 10) zu = " " + crt[9];
+					cv.fillText(crt[0] + ": " + crt[5] + " & " + crt[8] + zu, (xb+xe)/2, (yb+ye)/2);
 					console.log("Moving to " + crt[0])
 				}
 			    cv.stroke();
@@ -334,12 +336,12 @@
 		    });
 
 		    canvas.addEventListener('mousemove', (e) => {
-				var rect = canvas.getBoundingClientRect(); // 获取canvas元素相对于视窗的位置集合
-				var scaleX = canvas.width / rect.width; // 水平方向的缩放因子
-				var scaleY = canvas.height / rect.height; // 垂直方向的缩放因子
+				var rect = canvas.getBoundingClientRect();
+				var scaleX = canvas.width / rect.width;
+				var scaleY = canvas.height / rect.height;
 
-				cmousex = (e.clientX - rect.left - ctransx) / scale; // 计算相对x坐标
-				cmousey = (e.clientY - rect.top - ctransy) / scale; // 计算相对y坐标
+				cmousex = (e.clientX - rect.left - ctransx) / scale; 
+				cmousey = (e.clientY - rect.top - ctransy) / scale;
 			    if (isDragging) {
 				    const dx = e.offsetX - startX;
 				    const dy = e.offsetY - startY;

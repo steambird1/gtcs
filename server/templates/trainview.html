@@ -1,0 +1,26 @@
+
+<!-- To implement modifier -->
+<table>
+    <tr>
+        <th>Train</th>
+        <th>From</th>
+        <th>To</th>
+        <th>Speed</th>
+        <th>Location</th>
+        <th>Position</th>
+        <th>Integrated AFB</th>
+        <th>Auto Diverging</th>
+    </tr>
+    {% for i in trains %}
+    <tr>
+        <td>{{ i }}</td>
+        <td>{{ trains[i][0] }}</td>
+        <td>{{ trains[i][1] }}</td>
+        <td>{{ round(trains[i][3], 1) }}</td>
+        <td>{{ trains[i][4] }}</td>
+        <td>{{ round(trains[i][5], 1) }}</td>
+        <td>{{ trains[i][6] }}</td>
+        <td>{{ trains[i][7] }}</td>
+    </tr>
+    {% endfor %}
+</table>
