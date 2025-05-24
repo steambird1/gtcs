@@ -74,7 +74,7 @@ class GTCSMainApplication(ShowBase):
         self.task_mgr.add(self.UpdateSceneTask, "SceneUpdater")
         self.task_mgr.add(self.MovingTask, "CameraMover")
     def AddIllumination(self, color_desc, offset=0):
-        imain = panda3d.core.DirectionalLight('dlight{}'.format(str(len(self.lightings))))
+        imain = panda3d.core.PointLight('dlight{}'.format(str(len(self.lightings))))
         imain.setColor(color_desc)
         ipar = self.render.attachNewNode(imain)
         self.lightings.append(ipar)
@@ -98,7 +98,7 @@ class GTCSMainApplication(ShowBase):
         #print("Current configuration of color",id,":",ipar.getColor())
         self.render.clearLight(iparz)
         ipar.setColor(color_desc)
-        iparz.setPos(x-accufix+2, y, z-offset)
+        iparz.setPos(x-accufix+12, y, z-offset)
         iparz.lookAt(-graphpos, 0, 45)
         if turnon:
             self.render.setLight(iparz)
