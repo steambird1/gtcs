@@ -14,6 +14,7 @@ loadPrcFileData("", "catch-signals 0")
 PORT=6160
 TERMINATE="####"
 ZOOM=3
+NIGHT=True
 
 # Manage only S-signal for debugging
 signal_info = []
@@ -37,21 +38,24 @@ class GTCSMainApplication(ShowBase):
             self.env1.reparentTo(self.render)
 
         self.free_location = False
+        self.sunlight = panda3d.core.AmbientLight('ambientLight')
+        if NIGHT:
+            self.setBackgroundColor(r=0,g=0,b=0,a=0)
+        else:
+            self.setBackgroundColor(r=0.5294,g=0.8078,b=0.9216,a=0)
+            self.sunlight.setColor((0.05, 0.05, 0.08, 1))
+            
+        self.light = render.attachNewNode(self.sunlight)
+        self.light.setPos(10, 30, 3)
+        render.setLight(self.light)
 
         self.light_models = []
+        self.lightings = []
         #self.camera.look_at(0, 0, 0)
         self.red_light = self.loader.loadTexture("gtcs_red_texture.png")
         self.yellow_light = self.loader.loadTexture("gtcs_yellow_texture.png")
         self.green_light = self.loader.loadTexture("gtcs_green_texture.png")
         self.metal = self.loader.loadTexture("gtcs_metal.png")
-        self.sunlight = panda3d.core.AmbientLight('ambientLight')
-        # self.sunlight = panda3d.core.DirectionalLight('plight')
-
-        # self.sunlight.setColor((0, 0, 1, 1))
-        self.light = render.attachNewNode(self.sunlight)
-        self.light.setPos(10, 30, 3)
-        render.setLight(self.light)
-
         # self.block1 = self.loader.loadModel("test2.gltf")
         # self.block1.reparentTo(self.render)
 
@@ -69,6 +73,12 @@ class GTCSMainApplication(ShowBase):
 
         self.task_mgr.add(self.UpdateSceneTask, "SceneUpdater")
         self.task_mgr.add(self.MovingTask, "CameraMover")
+    def AddIllumination(self, color_desc, offset=0):
+        imain = panda3d.core.PointLight('plight')
+        imain.setColor(color_desc)
+        imain.attenuation = (1,0,1)
+        ipar = self.render.attachNewNode(imain)
+        self.lightings.append(ipar)
     def AddLights(self, texture=None, altexture=None, ltspec="gtcs_tbase.stl", sgspec="gtcs_red.stl"):
         ltmain = self.loader.loadModel(ltspec)
         sgmain = self.loader.loadModel(sgspec)
@@ -79,6 +89,13 @@ class GTCSMainApplication(ShowBase):
         ltmain.reparentTo(self.render)
         sgmain.reparentTo(self.render)
         self.light_models.append([ltmain, sgmain])
+    def ModifyIllumination(self, id, x, y, z, color_desc, offset=0):
+        while len(self.lightings) <= id:
+            self.AddIllumination(color_desc, offset)
+        ipar = self.lightings[id]
+        ipar.setColor(color_desc)
+        ipar.setPos(x-accufix, y, z-offset)
+        ipar.lookAt(0, 0, 30)
     def ModifyLights(self, id, x, y, z, texture=None, offset=0, altexture=None, ltspec="gtcs_tbase.stl", sgspec="gtcs_red.stl"):
         while len(self.light_models) <= id:
             self.AddLights(texture, altexture, ltspec, sgspec)
@@ -103,6 +120,13 @@ class GTCSMainApplication(ShowBase):
             return self.yellow_light
         else:
             return self.red_light
+    def GetSignalColor(self, signal):
+        if (signal in [".","|"]):
+            return (0,1,0,0)
+        elif (signal.isdigit() and signal != "0") or (signal in ["<",">","/"]):
+            return (1,1,0,0)
+        else:
+            return (1,0,0,0)
     def GetSignalOffset(self, signal):
         if (signal in [".","|"]):
             return 40
@@ -123,6 +147,7 @@ class GTCSMainApplication(ShowBase):
     def UpdateSceneTask(self, task):
         global signal_info
         lts = 0
+        ils = 0
         for i in signal_info:
             try:
                 #print("Processing:",i)
@@ -133,6 +158,8 @@ class GTCSMainApplication(ShowBase):
                 if csp[1] == "S":
                     self.ModifyLights(lts, (-dis)*ZOOM, 0, 0, self.GetSignalTexture(csp[3]), self.GetSignalOffset(csp[3]))
                     lts += 1
+                    self.ModifyIllumination(ils, (-dis)*ZOOM, 0, 0, self.GetSignalColor(csp[3]), self.GetSignalOffset(csp[3]))
+                    ils += 1
                     if len(csp) >= 4:
                         self.UpdateSignalScene(lts, csp[3], (-dis)*ZOOM, 0, 0)
                         lts += 1
@@ -141,6 +168,8 @@ class GTCSMainApplication(ShowBase):
                 print("Data error:",str(e))
         for i in range(lts, len(self.light_models)):
             self.ModifyLights(i, 1000000, 1000000, 1000000)
+        for i in range(ils, len(self.lightings)):
+            self.ModifyIllumination(i, 1000000, 1000000, 1000000)
         return Task.cont
     def MovingTask(self, task):
         global graphpos, FREE
