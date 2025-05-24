@@ -41,13 +41,13 @@ class GTCSMainApplication(ShowBase):
         self.sunlight = panda3d.core.AmbientLight('ambientLight')
         if NIGHT:
             self.setBackgroundColor(r=0,g=0,b=0,a=0)
+            self.sunlight.setColor((0.5, 0.5, 0.5, 1))
         else:
             self.setBackgroundColor(r=0.5294,g=0.8078,b=0.9216,a=0)
-            self.sunlight.setColor((0.05, 0.05, 0.08, 1))
             
         self.light = render.attachNewNode(self.sunlight)
         self.light.setPos(10, 30, 3)
-        render.setLight(self.light)
+        self.render.setLight(self.light)
 
         self.light_models = []
         self.lightings = []
@@ -74,9 +74,8 @@ class GTCSMainApplication(ShowBase):
         self.task_mgr.add(self.UpdateSceneTask, "SceneUpdater")
         self.task_mgr.add(self.MovingTask, "CameraMover")
     def AddIllumination(self, color_desc, offset=0):
-        imain = panda3d.core.PointLight('plight')
+        imain = panda3d.core.DirectionalLight('dlight{}'.format(str(len(self.lightings))))
         imain.setColor(color_desc)
-        imain.attenuation = (1,0,1)
         ipar = self.render.attachNewNode(imain)
         self.lightings.append(ipar)
     def AddLights(self, texture=None, altexture=None, ltspec="gtcs_tbase.stl", sgspec="gtcs_red.stl"):
@@ -89,13 +88,20 @@ class GTCSMainApplication(ShowBase):
         ltmain.reparentTo(self.render)
         sgmain.reparentTo(self.render)
         self.light_models.append([ltmain, sgmain])
-    def ModifyIllumination(self, id, x, y, z, color_desc, offset=0):
+    def ModifyIllumination(self, id, x, y, z, color_desc, offset=0, turnon=True):
         while len(self.lightings) <= id:
             self.AddIllumination(color_desc, offset)
-        ipar = self.lightings[id]
+        #ipar = self.lightings[id]
+        iparz = self.render.find("**/dlight{}".format(str(id)))
+        ipar = iparz.node()
+        flag = False
+        #print("Current configuration of color",id,":",ipar.getColor())
+        self.render.clearLight(iparz)
         ipar.setColor(color_desc)
-        ipar.setPos(x-accufix, y, z-offset)
-        ipar.lookAt(0, 0, 30)
+        iparz.setPos(x-accufix+2, y, z-offset)
+        iparz.lookAt(-graphpos, 0, 45)
+        if turnon:
+            self.render.setLight(iparz)
     def ModifyLights(self, id, x, y, z, texture=None, offset=0, altexture=None, ltspec="gtcs_tbase.stl", sgspec="gtcs_red.stl"):
         while len(self.light_models) <= id:
             self.AddLights(texture, altexture, ltspec, sgspec)
@@ -109,6 +115,7 @@ class GTCSMainApplication(ShowBase):
             self.light_models[id][0] = self.loader.loadModel(ltspec)
         if sgspec != "gtcs_red.stl":
             self.light_models[id][1] = self.loader.loadModel(sgspec)
+        
         ltmain.setPos(x-accufix, y, z)
         sgmain.setPos(x-accufix, y, z-offset)
     def ModifyScenes(self, id, x, y, z, model, texture=None):
@@ -122,11 +129,11 @@ class GTCSMainApplication(ShowBase):
             return self.red_light
     def GetSignalColor(self, signal):
         if (signal in [".","|"]):
-            return (0,1,0,0)
+            return (0,0.3,0,0)
         elif (signal.isdigit() and signal != "0") or (signal in ["<",">","/"]):
-            return (1,1,0,0)
+            return (0.3,0.3,0,0)
         else:
-            return (1,0,0,0)
+            return (0.3,0,0,0)
     def GetSignalOffset(self, signal):
         if (signal in [".","|"]):
             return 40
@@ -148,6 +155,8 @@ class GTCSMainApplication(ShowBase):
         global signal_info
         lts = 0
         ils = 0
+        self.render.setLightOff()
+        self.render.setLight(self.light)
         for i in signal_info:
             try:
                 #print("Processing:",i)
@@ -169,7 +178,7 @@ class GTCSMainApplication(ShowBase):
         for i in range(lts, len(self.light_models)):
             self.ModifyLights(i, 1000000, 1000000, 1000000)
         for i in range(ils, len(self.lightings)):
-            self.ModifyIllumination(i, 1000000, 1000000, 1000000)
+            self.ModifyIllumination(i, 1000000, 1000000, 1000000, (1,1,1,0), turnon=False)
         return Task.cont
     def MovingTask(self, task):
         global graphpos, FREE
