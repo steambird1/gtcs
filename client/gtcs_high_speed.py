@@ -1,6 +1,7 @@
 import turtle
 import time
 from urllib.request import urlopen
+from urllib import request
 import threading
 import random
 import os
@@ -24,6 +25,7 @@ BCTR = "http://127.0.0.1:5033/befehl"
 LCTR = "http://127.0.0.1:5033/lkjdisp"
 ICTR = "http://127.0.0.1:5033/signaldata"
 TCTR="http://127.0.0.1:5033/trainop"
+RENDER="http://127.0.0.1:6160/"
 ZUGNAME = "ICE_1"
 SCHUTZ_SIMU = True
 SCHUTZ_PROB = 1
@@ -51,6 +53,8 @@ prereded = False
 schutz = False
 schutz_info = ""
 has_afb = False
+
+asuber=0
 
 extcmd = []
 lastseg = []
@@ -1395,7 +1399,7 @@ zusatz_spdlim = 300
 zusatz_spdlim_at = 10000000
 
 def gtcs3():
-    global lbdisp, passdz, geschw, lastseg, furseg, extcmd, LCTR, curlkj, lastspdlim, g3err, accuer, curspeed, caccel, nextdist, spdlim, accreq, acreqspd, zugat, ospeed, zusatz_lastspdlim, zusatz_spdlim, zusatz_spdlim_at, appdz
+    global lbdisp, passdz, geschw, lastseg, furseg, extcmd, LCTR, curlkj, lastspdlim, g3err, accuer, curspeed, caccel, nextdist, spdlim, accreq, acreqspd, zugat, ospeed, zusatz_lastspdlim, zusatz_spdlim, zusatz_spdlim_at, appdz, asuber
     while True:
         # Load actual special command
         zusatz_spdlim = 300
@@ -1409,6 +1413,7 @@ def gtcs3():
             # Resolve actual information:
             if (zugat != "") and (zugat != "?"):
                 u = urlopen(ICTR + "?sid=" + zugat + "&dev=" + str(int(accuer)))
+                asuber = int(accuer)
                 extinf = u.read().decode('utf-8')
                 u.close()
                 extcmd = extinf.split("\n")
@@ -1751,6 +1756,19 @@ def afb():
             # plog.append(time.ctime() + " AFB not enabled")
             time.sleep(1)
 
+def render_3d():
+    global extcmd, RENDER, accuer, asuber
+    print("Render thread running")
+    while True:
+        try:
+            curdata = str(int(accuer)) + " " + str(int(asuber)) + "\n" + "\n".join(extcmd)
+            cd = curdata.encode('utf-8')
+            req = request.Request(RENDER, cd)
+            resp = request.urlopen(req)
+            resp.close()
+        except Exception as e:
+            pass
+        time.sleep(0.2)
 
 # turtle.right(90)
 render_gtcs()
@@ -1763,6 +1781,7 @@ tb = threading.Thread(target=befread)
 tsh = threading.Thread(target=sound_thr)
 tgs = threading.Thread(target=gsmgmt)
 tab = threading.Thread(target=afb)
+trd = threading.Thread(target=render_3d)
 th.start()
 t3.start()
 tl.start()
@@ -1770,6 +1789,7 @@ tb.start()
 tsh.start()
 tgs.start()
 tab.start()
+trd.start()
 turtle.mainloop()
 # print(turtle.heading())
 # input()
