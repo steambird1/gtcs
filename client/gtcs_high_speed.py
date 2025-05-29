@@ -122,6 +122,17 @@ failures = {
     "logerr": ["Recorder Failure", False, lambda: False]
 }
 
+was_failure = {}
+sch_failure = []
+
+# 16 Carriages
+for i in range(1,17):
+    failures["car"+str(i)+"smoke"] = ["Carriage " + str(i) + " Lavatory Smoke", False, lambda: False]
+    failures["car"+str(i)+"fire"] = ["Carriage " + str(i) + " Fire", False, lambda: False]
+    sch_failure.append("car"+str(i)+"fire")
+
+for i in failures:
+    was_failure[i] = False
 
 def maxthr_val():
     global apress, evolts, eamps, cpsrc
@@ -697,6 +708,8 @@ def render_gtcs_main():
     for i in failures:
         if failures[i][1] or (failures[i][2]()):
             gtcsinfo.append([failures[i][0], "maroon1"])
+            if not was_failure[i]:
+                start_sound("warning")
     for i in gtcsinfo:
         if DARK and i[1] == "blue":
             i[1] = "cyan"
@@ -1006,12 +1019,14 @@ def locupd():
 
 
 def schutz_cancel():
-    global schutz, on_keyboard, ps_queue
+    global schutz, on_keyboard, ps_queue, failures, was_failure
     if on_keyboard:
         keyboard_add('5')
         return
     schutz = False
     light[3] = False
+    for i in failures:
+        was_failure[i] = (failures[i][1] or failures[i][2]())
     ps_queue.clear()
 
 
@@ -1129,7 +1144,8 @@ def change_afb():
         keyboard_add('g')
         return
     has_afb = not has_afb
-
+    if not has_afb:
+        start_sound('caution')
 
 t.screen.onkey(wind_charge, 'o')
 t.screen.onkey(wind_release, 'p')
@@ -1604,6 +1620,7 @@ def befread():
             if su != befehltext:
                 befconf = False
                 moded = True
+                start_sound('caution')
             befehltext = su
             if befconf:
                 befconf = False
@@ -1629,6 +1646,10 @@ def gsmgmt():
         if random.randint(0, 35000) < SCHUTZ_PROB:
             rf = random.choice(list(failures))
             failures[rf][1] = not failures[rf][1]
+            if failures[rf][1] and (rf in sch_failure):
+                schutz_broadcast("Störung")
+            for i in was_failure:
+                was_failure[i] = False
         # Failure effects
         if failures["thr"][1]:
             if power > 0:
