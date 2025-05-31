@@ -908,6 +908,8 @@ def trainop():
         if "autodv" in request.args:
             divg = request.args.get("autodv")
         if name not in trains:
+            if von not in signals:
+                return "Bad Request", 400
             trains[name] = [von, nach, int(v), 0, von, 0, True, divg.strip() == "1"]
         else:
             trains[name][0] = von
@@ -919,6 +921,7 @@ def trainop():
         if not check_auth(request.args.get("auth"), TRAIN_AUTH):
             return "Operation not permitted", 400
         name = request.args.get("name").replace("_", " ")
+        name = name.replace("^", "_")
         v = request.args.get("spd")
         cv = request.args.get("vist")
         loc = request.args.get("sname")
