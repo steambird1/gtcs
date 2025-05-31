@@ -1005,8 +1005,8 @@ def tsimu():
             zeitplan[zname] = datetime.datetime.now() + datetime.timedelta(hours=((rlen / 1000) / (0.75 * vsoll)))
 
         # Normal operation for all trains
-        try:
-            for i in trains:
+        for i in trains:
+            try:
                 vziel = 0
                 future = ""
                 try:
@@ -1014,6 +1014,7 @@ def tsimu():
                     vziel = min(translate(signals[future][2]), trains[i][2])
                 except Exception as e:
                     print("Train processor error", str(e))
+                    continue
                 if trains[i][6]:
                     if trains[i][3] >= vziel + 40:
                         trains[i][3] -= random.randint(155,205) / 10
@@ -1067,8 +1068,8 @@ def tsimu():
                         elif (signals[route[1]][2] in [RED, REDYELLOW]) and ((route[1] not in zugin) or (zugin[route[1]] == "") or (zugin[route[1]] == i)):
                             signals[route[1]][2] = "-"
                             # Report signal mod !!!
-        except Exception as e:
-            print("Error",str(e))
+            except Exception as e:
+                print("Error",str(e))
         lastcall = time.time()
         while time.time() < (ct+1):
             idle += 1
