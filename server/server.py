@@ -865,20 +865,22 @@ def trainsview():
     if "pax" in request.args:
         tdata = []
         for i in trains:
-            if trains[i][1] == "" or trains[i][4] == "":
-                tj = ([], (10**8))
-            else:
-                tj = train_dijkstra(trains[i][4], trains[i][1], True)
-            if (request.args.get("pax") == "open") or (request.args.get("pax") in tj[0]):
-                etd = datetime.timedelta(hours=(tj[1] / 1000) / (0.75 * trains[i][2]))
-                eta = datetime.datetime.now() + etd
-                einfo = "On Schuedule"
-                if i not in zeitplan:
-                    zeitplan[i] = eta
-                elif (eta - zeitplan[i]) > datetime.timedelta(hours=1):
-                    einfo = '<span style="color: red; font-weight: 700;">Delayed</span>'
-                elif (eta - zeitplan[i]) > datetime.timedelta(minutes=5):
-                    einfo = '<span style="color: orange; font-weight: 700;">Delayed for {} minutes</span>'.format(str(int((eta - zeitplan[i]).total_seconds() / 60)))
+            einfo = '<span style="font-weight: 700;">Unknown</span>'
+            try:
+                if trains[i][1] == "" or trains[i][4] == "":
+                    tj = ([], (10**8))
+                else:
+                    tj = train_dijkstra(trains[i][4], trains[i][1], True)
+                if (request.args.get("pax") == "open") or (request.args.get("pax") in tj[0]):
+                    etd = datetime.timedelta(hours=(tj[1] / 1000) / (0.75 * trains[i][2]))
+                    eta = datetime.datetime.now() + etd
+                    einfo = "On Schuedule"
+                    if i not in zeitplan:
+                        zeitplan[i] = eta
+                    elif (eta - zeitplan[i]) > datetime.timedelta(hours=1):
+                        einfo = '<span style="color: red; font-weight: 700;">Delayed</span>'
+                    elif (eta - zeitplan[i]) > datetime.timedelta(minutes=5):
+                        einfo = '<span style="color: orange; font-weight: 700;">Delayed for {} minutes</span>'.format(str(int((eta - zeitplan[i]).total_seconds() / 60)))
                 tdata.append([i, (translation[trains[i][1]] if trains[i][1] in translation else "--"), (zeitplan[i].strftime("%H:%M")), einfo])
         return render_template("paxinner.html", tdata=tdata)
     else:
