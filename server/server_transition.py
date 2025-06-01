@@ -119,6 +119,7 @@ with_train = {}
 # TODO: Train simulator not done
 trains = {}
 zeitplan = {}
+deact_cnt = {}
 
 # CALL AFTER ANY MODIFICATION !!!
 def report_signal_mod(key):
@@ -236,7 +237,7 @@ def getlatest(name):
     global sids
     return name+str(sids[name])
 
-def addstation(name,station,sxd,syd,mxd,myd,dn="",tr=""):
+def addstation(name,station,sxd,syd,mxd,myd,dn="",tr="",pcnt=3):
     global sids, signals, red_at_exit, translation
     cstat = signals[getlatest(name)]
     ent = name + "_" + station + "_ent"
@@ -253,6 +254,11 @@ def addstation(name,station,sxd,syd,mxd,myd,dn="",tr=""):
     if tr != "":
         translation[ext] = tr
         translation[dn + "_" + station + "_ext"] = tr
+    for i in range(1,pcnt+1):
+        cpk = name + "_" + station + "_park" + str(i)
+        signals[ent][3].append(cpk)
+        signals[cpk] = [[cstat[0][0]+mxd+i,cstat[0][1]+myd+i],[cstat[0][0]+sxd+mxd+i,cstat[0][1]+syd+myd+i],RED,[ent,ext],1]
+        signals[ext][3].append(cpk)
 """
 draw_line("C",-80,120,-30,60,10)
 draw_line("C",-30,60,-30,-60,10)
@@ -349,6 +355,25 @@ draw_line("S_dn",-50,-250,-5,-205,5)
 signals[getlatest("S_dn")][3].append("M_lyg_gleis3_ent")
 signals[getlatest("S_dn")][4] = 1
 
+# New Inazuma Map (Bridge has approx. 90 km/h speed limit)
+
+signals["M_dn_lyg_ext"][3].append("I_up1")
+
+draw_line("I_up",5,-200,300,-200,5)
+draw_line("I_up",300,-200,300,200,5)
+addstation("I_up", "Inazuma", 0, 2, 0, 3, "I_dn")
+draw_line("I_up",305,205,305,155,5)
+addstation("I_up", "Watatsumi", 0, -2, 0, -3, "I_dn")
+draw_line("I_dn",305,160,305,155,5)
+addstation("I_dn", "Watatsumi", 0, 2, 0, 3, "I_up")
+draw_line("I_dn",305,155,305,205,5)
+addstation("I_dn", "Inazuma", 0, -2, 0, -3, "I_up")
+draw_line("I_dn",300,200,300,-200,5)
+draw_line("I_dn",300,-200,5,-200,5)
+
+signals["I_up1"][3].append("M_dn_lyg_ext")
+signals[getlatest("I_dn")][3].append("M_lyg_gleis4_ent")
+
 def generate_for(name,c1=2,c2=8,mnspd=10,mxspd=20):
     global sids, addinfos, ZOOM
     for i in range(1, sids[name]):
@@ -377,6 +402,9 @@ generate_for("V_up")
 generate_for("V_dn")
 generate_for("S_up",8,20,6,15)
 generate_for("S_dn",8,20,6,15)
+
+generate_for("I_up",1,18,5,20)
+generate_for("I_dn",1,18,5,20)
 
 draw_line("F_up",-5,-205,-805,605,5)
 addstation("F_up", "Fountaine", -2, 0, 3, 0, "F_dn", "Fountaine")
@@ -1041,6 +1069,7 @@ def trainsview():
                         tj = ([], (10**8))
                     else:
                         tj = train_dijkstra(trains[i][4], trains[i][1], True)
+                        zeitplan[i] = datetime.datetime.now()
                     if (request.args.get("pax") == "open") or (request.args.get("pax") in tj[0]):
                         etd = datetime.timedelta(hours=(tj[1] / 1000) / (0.75 * trains[i][2]))
                         eta = datetime.datetime.now() + etd
@@ -1072,7 +1101,7 @@ def paxview():
 
 @app.route("/trainop")
 def trainop():
-    global trains, TRAIN_AUTH, CTRL_AUTH
+    global trains, TRAIN_AUTH, CTRL_AUTH, deact_cnt
     # TODO: Not implemented now
     mode = request.args.get("mode")
     if mode == "update":
@@ -1111,6 +1140,7 @@ def trainop():
             trains[name][3] = int(cv)
             trains[name][4] = loc
             trains[name][5] = int(dev)
+        deact_cnt[name] = 0
         return "OK"
     return "Invalid operation", 500
 
@@ -1154,7 +1184,7 @@ def train_dijkstra(von, nach, pass_red=False, max_len=(10**9)):
 TMAX = 15
 
 def tsimu():
-    global trains, ZOOM, zeitplan
+    global trains, ZOOM, zeitplan, deact_cnt, warninfo
     termcnt = 0
     idle = 0
     lastcall = time.time()
@@ -1225,6 +1255,17 @@ def tsimu():
                             clen = length(trains[i][4]) * ZOOM
                         if done:
                             continue
+                    else:
+                        if i not in deact_cnt:
+                            deact_cnt[i] = 1
+                        else:
+                            deact_cnt[i] = deact_cnt[i] + 1
+                            if deact_cnt[i] > 60:
+                                if trains[i][4] in signals:
+                                    zugcall(trains[i][4], "1", i)
+                                warninfo += "<p>[Info] Train {} lost contact</p>".format(i)
+                                trains.pop(i)
+                                continue
                     if trains[i][7] and (trains[i][1] in signals) and (trains[i][4] in signals):
                         route = train_dijkstra(trains[i][4], trains[i][1], True)[0]
                         #print("Attempt for diverg",i,"path",route[:3])
@@ -1257,9 +1298,6 @@ def tsimu():
 
 if __name__ == '__main__':
     for i in signals:
-        scan_signal(i)
-        break
-    for i in signals:
         if i not in addinfos:
             #print("Addinfo assist",i)
             addinfos[i] = []
@@ -1282,5 +1320,8 @@ asked you to do so.
     ts = threading.Thread(target=tsimu)
     ts.start()
     print("Graphics start")
+    for i in signals:
+        scan_signal(i)
+        break
     turtle.ontimer(imgupd, 1000)
     turtle.mainloop()
