@@ -1044,9 +1044,10 @@ def train_dijkstra(von, nach, pass_red=False, max_len=(10**14)):
     return (track[::-1], dis[nach])
 
 TMAX = 15
+tlastcall = {}
 
 def tsimu():
-    global trains, ZOOM, zeitplan, deact_cnt, warninfo
+    global trains, ZOOM, zeitplan, deact_cnt, warninfo, tlastcall
     termcnt = 0
     idle = 0
     lastcall = time.time()
@@ -1076,9 +1077,12 @@ def tsimu():
             zeitplan[zname] = datetime.datetime.now() + datetime.timedelta(hours=((rlen / 1000) / (0.75 * vsoll)))
 
         # Normal operation for all trains
+        plastcall = time.time()
         try:
             for i in trains:
                 try:
+                    if i not in tlastcall:
+                        tlastcall[i] = time.time()
                     vziel = 0
                     zaccel = 0
                     future = ""
@@ -1092,14 +1096,16 @@ def tsimu():
                         continue
                     if trains[i][6]:
                         if zaccel < -0.5:
-                            trains[i][3] += (zaccel * 3.6 * (time.time() - lastcall)) + (random.randint(-5, 5) / 10)
+                            trains[i][3] += (zaccel * 3.6 * (time.time() - tlastcall[i])) + (random.randint(-5, 5) / 10)
                         elif zaccel > -0.1:
                             trains[i][3] += random.randint(30, 40) / 10
                         else:
                             trains[i][3] += random.randint(-5, 5) / 10
                         if trains[i][3] < 0:
                             trains[i][3] = 0
-                        trains[i][5] += (trains[i][3] / 3.6) * (time.time() - lastcall)
+                        print("Updating train",i,"by",(trains[i][3] / 3.6),"*",(time.time() - tlastcall[i]))
+                        trains[i][5] += (trains[i][3] / 3.6) * (time.time() - tlastcall[i])
+                        tlastcall[i] = time.time()
                         clen = length(trains[i][4]) * ZOOM
                         done = False
                         while trains[i][5] >= clen and (future in signals):
@@ -1156,7 +1162,7 @@ def tsimu():
                     print("Error",str(e))
         except Exception as e:
             print("Error",str(e))
-        lastcall = time.time()
+        lastcall = plastcall
         while time.time() < (ct+1):
             idle += 1
             time.sleep(0.05)
