@@ -365,6 +365,37 @@ def sdscan(sname,cdist=0,refdist=4500):
         ctmp += sdscan(sgt, cdist + cl, refdist - cl)
     return ctmp
 
+# Return acceleration
+def sdeval(scanres,vist,vsoll=240):
+    accel = 0
+    # km/h
+    vziel = vist
+    #print(scanres)
+    if vist > vsoll:
+        accel = -4
+        vziel = vsoll
+    elif vist > vsoll - 10:
+        accel = -1
+        vziel = vsoll
+    for i in scanres:
+        csp = [int(i[0])] + i[1].split(" ")
+        dis = int(csp[0])
+        if dis <= 0:
+            continue
+        if csp[1] == "S":
+            vkmh = translate(csp[3])
+            if vist < vkmh:
+                continue
+            if dis <= 200:
+                caccel = -6
+            else:
+                vms = vkmh / 3.6
+                caccel = -((vist/3.6)*(vist/3.6)-vms*vms)/(2*(dis-200))
+            if caccel < accel:
+                accel = caccel
+                vziel = vkmh
+    return (accel, vziel)
+
 @app.route("/signaldata")
 def signaldata():
     global addinfos, signals, NORMREFDIST, ZOOM
@@ -862,27 +893,36 @@ TS_DENSITY = 500
 @app.route("/trainview")
 def trainsview():
     global trains, translation, zeitplan
-    if "pax" in request.args:
-        tdata = []
-        for i in trains:
-            if trains[i][1] == "" or trains[i][4] == "":
-                tj = ([], (10**8))
-            else:
-                tj = train_dijkstra(trains[i][4], trains[i][1], True)
-            if (request.args.get("pax") == "open") or (request.args.get("pax") in tj[0]):
-                etd = datetime.timedelta(hours=(tj[1] / 1000) / (0.75 * trains[i][2]))
-                eta = datetime.datetime.now() + etd
-                einfo = "On Schuedule"
-                if i not in zeitplan:
-                    zeitplan[i] = eta
-                elif (eta - zeitplan[i]) > datetime.timedelta(hours=1):
-                    einfo = '<span style="color: red; font-weight: 700;">Delayed</span>'
-                elif (eta - zeitplan[i]) > datetime.timedelta(minutes=5):
-                    einfo = '<span style="color: orange; font-weight: 700;">Delayed for {} minutes</span>'.format(str(int((eta - zeitplan[i]).total_seconds() / 60)))
+    try:
+        if "pax" in request.args:
+            tdata = []
+            for i in trains:
+                einfo = '<span style="font-weight: 700;">Unknown</span>'
+                try:
+                    if trains[i][1] == "" or trains[i][4] == "":
+                        tj = ([], (10**8))
+                    else:
+                        tj = train_dijkstra(trains[i][4], trains[i][1], True)
+                    if (request.args.get("pax") == "open") or (request.args.get("pax") in tj[0]):
+                        etd = datetime.timedelta(hours=(tj[1] / 1000) / (0.75 * trains[i][2]))
+                        eta = datetime.datetime.now() + etd
+                        einfo = "On Schuedule"
+                        if i not in zeitplan:
+                            zeitplan[i] = eta
+                        elif (eta - zeitplan[i]) > datetime.timedelta(hours=1):
+                            rmin = int((eta - zeitplan[i]).total_seconds() / 60)
+                            einfo = '<span style="color: red; font-weight: 700;">Delayed for {} hr {} min</span>'.format(str(rmin//60),str(rmin%60))
+                        elif (eta - zeitplan[i]) > datetime.timedelta(minutes=5):
+                            einfo = '<span style="color: orange; font-weight: 700;">Delayed for {} min</span>'.format(str(int((eta - zeitplan[i]).total_seconds() / 60)))
+                except Exception as e:
+                    print("Error in passenger view",str(e))
                 tdata.append([i, (translation[trains[i][1]] if trains[i][1] in translation else "--"), (zeitplan[i].strftime("%H:%M")), einfo])
-        return render_template("paxinner.html", tdata=tdata)
-    else:
-        return render_template("trainview.html", trains=trains, round=round)
+            return render_template("paxinner.html", tdata=tdata)
+        else:
+            return render_template("trainview.html", trains=trains, round=round)
+    except RuntimeError as re:
+        return "Page is being updated, please wait."
+        print("Runtime Error",str(re))
 
 @app.route("/staffview")
 def staffview():
@@ -908,6 +948,8 @@ def trainop():
         if "autodv" in request.args:
             divg = request.args.get("autodv")
         if name not in trains:
+            if von not in signals:
+                return "Bad Request", 400
             trains[name] = [von, nach, int(v), 0, von, 0, True, divg.strip() == "1"]
         else:
             trains[name][0] = von
@@ -919,6 +961,7 @@ def trainop():
         if not check_auth(request.args.get("auth"), TRAIN_AUTH):
             return "Operation not permitted", 400
         name = request.args.get("name").replace("_", " ")
+        name = name.replace("^", "_")
         v = request.args.get("spd")
         cv = request.args.get("vist")
         loc = request.args.get("sname")
@@ -998,72 +1041,78 @@ def tsimu():
                 signals[von][2] = "-"
             zugin[von] = zname
             trains[zname] = [von, nach, vsoll, 0, von, 0, True, True]
+            zugcall(von, "0", zname)
             rlen = train_dijkstra(von, nach, True)[1]
             zeitplan[zname] = datetime.datetime.now() + datetime.timedelta(hours=((rlen / 1000) / (0.75 * vsoll)))
 
         # Normal operation for all trains
         try:
             for i in trains:
-                vziel = 0
-                future = ""
                 try:
-                    future = signals[trains[i][4]][3][signals[trains[i][4]][4]]
-                    vziel = min(translate(signals[future][2]), trains[i][2])
-                except Exception as e:
-                    print("Train processor error", str(e))
-                if trains[i][6]:
-                    if trains[i][3] >= vziel + 40:
-                        trains[i][3] -= random.randint(155,205) / 10
-                    elif trains[i][3] >= vziel:
-                        trains[i][3] -= random.randint(45, 55) / 10
-                    elif trains[i][3] < vziel - 10:
-                        trains[i][3] += random.randint(30, 40) / 10
-                    elif trains[i][3] < vziel:
-                        trains[i][3] += random.randint(-5, 5) / 10
-                    if trains[i][3] < 0:
-                        trains[i][3] = 0
-                    trains[i][5] += (trains[i][3] / 3.6) * (time.time() - lastcall)
-                    clen = length(trains[i][4]) * ZOOM
-                    done = False
-                    while trains[i][5] >= clen and (future in signals):
-                        zugcall(trains[i][4], "1", i)
-                        trains[i][5] -= clen
-                        trains[i][4] = future
-                        if trains[i][4] == trains[i][1]:
-                            trains.pop(i)
-                            done = True
-                            print("End of train career",i)
-                            termcnt += 1
-                            break
-                        # TODO: CALL OF ENTER HERE IS INCORRECT ?
-                        zugcall(future, "0", i)
-                        future = signals[future][3][signals[future][4]]
-                        clen = length(trains[i][4]) * ZOOM
-                    if done:
+                    vziel = 0
+                    zaccel = 0
+                    future = ""
+                    try:
+                        future = signals[trains[i][4]][3][signals[trains[i][4]][4]]
+                        #vziel = min(translate(signals[future][2]), trains[i][2])
+                        zaccel, vziel = sdeval(sdscan(trains[i][4],-trains[i][5],12000),trains[i][3],trains[i][2])
+                        #print("Train",i,"acc=",zaccel,"vziel=",vziel)
+                    except Exception as e:
+                        print("Train processor error", str(e))
                         continue
-                if trains[i][7] and (trains[i][1] in signals) and (trains[i][4] in signals):
-                    route = train_dijkstra(trains[i][4], trains[i][1], True)[0]
-                    #print("Attempt for diverg",i,"path",route[:3])
-                    #print("Process auto diverging",i,"with","actual",signals[route[1]][3][signals[route[1]][4]],"ideal",route[2])
-                    if len(route) > 1:
-                        if (signals[route[0]][3][signals[route[0]][4]] != route[1]):
-                            divergcall(route[0], route[1])
-                        if (len(route) > 2) and (signals[route[1]][3][signals[route[1]][4]] != route[2]):
-                            originals[route[1]] = signals[route[1]][2]
-                            signals[route[1]][2] = "0"
-                            # Report signal mod !!!
-                            #print(i,":Checking diverging condition: present next:",signals[route[1]][3][signals[route[1]][4]],"prev:",route[0],"hope:",route[2])
-                            if (signals[route[1]][3][signals[route[1]][4]] == route[0]) or (not ((route[1] in zugin) and (zugin[route[1]] != "") and (zugin[route[1]] != i))):
-                                try:
-                                    #signals[route[1]][3][signals[route[1]][4]] = signals[route[1]][3].index(route[2])
-                                    signals[route[1]][2] = originals[route[1]]
-                                    divergcall(route[1], route[2])
-                                    # Report signal mod !!!
-                                except Exception as e:
-                                    print("Unable to configure diverging track", str(e))
-                        elif (signals[route[1]][2] in [RED, REDYELLOW]) and ((route[1] not in zugin) or (zugin[route[1]] == "") or (zugin[route[1]] == i)):
-                            signals[route[1]][2] = "-"
-                            # Report signal mod !!!
+                    if trains[i][6]:
+                        if zaccel < -0.5:
+                            trains[i][3] += (zaccel * 3.6 * (time.time() - lastcall)) + (random.randint(-5, 5) / 10)
+                        elif zaccel > -0.1:
+                            trains[i][3] += random.randint(30, 40) / 10
+                        else:
+                            trains[i][3] += random.randint(-5, 5) / 10
+                        if trains[i][3] < 0:
+                            trains[i][3] = 0
+                        trains[i][5] += (trains[i][3] / 3.6) * (time.time() - lastcall)
+                        clen = length(trains[i][4]) * ZOOM
+                        done = False
+                        while trains[i][5] >= clen and (future in signals):
+                            zugcall(trains[i][4], "1", i)
+                            trains[i][5] -= clen
+                            trains[i][4] = future
+                            if trains[i][4] == trains[i][1]:
+                                trains.pop(i)
+                                done = True
+                                print("End of train career",i)
+                                termcnt += 1
+                                break
+                            # TODO: CALL OF ENTER HERE IS INCORRECT ?
+                            zugcall(future, "0", i)
+                            future = signals[future][3][signals[future][4]]
+                            clen = length(trains[i][4]) * ZOOM
+                        if done:
+                            continue
+                    if trains[i][7] and (trains[i][1] in signals) and (trains[i][4] in signals):
+                        route = train_dijkstra(trains[i][4], trains[i][1], True)[0]
+                        #print("Attempt for diverg",i,"path",route[:3])
+                        #print("Process auto diverging",i,"with","actual",signals[route[1]][3][signals[route[1]][4]],"ideal",route[2])
+                        if len(route) > 1:
+                            if (signals[route[0]][3][signals[route[0]][4]] != route[1]):
+                                divergcall(route[0], route[1])
+                            if (len(route) > 2) and (signals[route[1]][3][signals[route[1]][4]] != route[2]):
+                                originals[route[1]] = signals[route[1]][2]
+                                signals[route[1]][2] = "0"
+                                # Report signal mod !!!
+                                #print(i,":Checking diverging condition: present next:",signals[route[1]][3][signals[route[1]][4]],"prev:",route[0],"hope:",route[2])
+                                if (signals[route[1]][3][signals[route[1]][4]] == route[0]) or (not ((route[1] in zugin) and (zugin[route[1]] != "") and (zugin[route[1]] != i))):
+                                    try:
+                                        #signals[route[1]][3][signals[route[1]][4]] = signals[route[1]][3].index(route[2])
+                                        signals[route[1]][2] = originals[route[1]]
+                                        divergcall(route[1], route[2])
+                                        # Report signal mod !!!
+                                    except Exception as e:
+                                        print("Unable to configure diverging track", str(e))
+                            elif (signals[route[1]][2] in [RED, REDYELLOW]) and ((route[1] not in zugin) or (zugin[route[1]] == "") or (zugin[route[1]] == i)):
+                                signals[route[1]][2] = "-"
+                                # Report signal mod !!!
+                except Exception as e:
+                    print("Error",str(e))
         except Exception as e:
             print("Error",str(e))
         lastcall = time.time()
