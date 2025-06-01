@@ -1249,6 +1249,7 @@ def tsimu():
                             trains[i][5] -= clen
                             trains[i][4] = future
                             if trains[i][4] == trains[i][1]:
+                                tlastcall.pop(i)
                                 trains.pop(i)
                                 done = True
                                 print("End of train career",i)
@@ -1269,6 +1270,7 @@ def tsimu():
                                 if trains[i][4] in signals:
                                     zugcall(trains[i][4], "1", i)
                                 warninfo += "<p>[Info] Train {} lost contact</p>".format(i)
+                                tlastcall.pop(i)
                                 trains.pop(i)
                                 continue
                     if trains[i][7] and (trains[i][1] in signals) and (trains[i][4] in signals):
