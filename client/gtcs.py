@@ -464,12 +464,32 @@ def render_route():
         routedisp.pencolor(MYBLUE)
         routedisp.write(str(round(cfurseg[0]/1000, 2)), align='right', font=FONT)
 
+def render_t2bar():
+    turtle2.clear()
+    turtle2.penup()
+    turtle2.goto(-300, 0)
+    for i in range(0,200,20):
+        turtle2.goto(-300, i)
+        turtle2.write(str(i*20),font=FONT)
+
 def gtcs3_load():
-    global LEVEL, curspeed, lastspdlim, zusatz_lastspdlim, lbdisp
+    global LEVEL, curspeed, lastspdlim, zusatz_lastspdlim, lbdisp, dif_warning
     if LEVEL < 2:
         return
     limdraw.showturtle()
     limdraw.clear()
+    limdraw.penup()
+    if dif_warning > 0:
+        # Fill warning
+        limdraw.fillcolor('gray26')
+        limdraw.goto(-320, -10)
+        limdraw.begin_fill()
+        limdraw.goto(-255, -10)
+        limdraw.goto(-255, 260)
+        limdraw.goto(-320, 260)
+        limdraw.goto(-320, -10)
+        limdraw.end_fill()
+        render_t2bar()
     limdraw.goto(-320, 0)
     limdraw.pendown()
     limdraw.pencolor('orange')
@@ -548,12 +568,7 @@ def render_gtcs():
     if LEVEL >= 3:
         gtcs3_init(True)
     # Also available for GTCS-1 now
-    turtle2.clear()
-    turtle2.penup()
-    turtle2.goto(-300, 0)
-    for i in range(0,200,20):
-        turtle2.goto(-300, i)
-        turtle2.write(str(i*20),font=FONT)
+    render_t2bar()
     render_bar()
     spdturtle.goto(-160, 80)
     thrturtle.goto(160, 80)
@@ -1340,8 +1355,12 @@ def accelreq(spdlim, sd):
 zusatz_spdlim = 300
 zusatz_spdlim_at = 10000000
 
+former_sid = "?"
+former_signal = "?"
+dif_warning = 0
+
 def gtcs3():
-    global lbdisp, passdz, geschw, lastseg, furseg, extcmd, LCTR, curlkj, lastspdlim, g3err, accuer, curspeed, caccel, nextdist, spdlim, accreq, acreqspd, zugat, ospeed, zusatz_lastspdlim, zusatz_spdlim, zusatz_spdlim_at, appdz, asuber
+    global lbdisp, passdz, geschw, lastseg, furseg, extcmd, LCTR, curlkj, lastspdlim, g3err, accuer, curspeed, caccel, nextdist, spdlim, accreq, acreqspd, zugat, ospeed, zusatz_lastspdlim, zusatz_spdlim, zusatz_spdlim_at, appdz, asuber, dif_warning, former_sid, former_signal
     while True:
         # Load actual special command
         zusatz_spdlim = 300
@@ -1432,6 +1451,10 @@ def gtcs3():
                     update_loc(sr[2])
                 else:
                     spdlim = translate(sr[1])
+                    if sr[1] != former_signal or sr[2] != former_sid:
+                        dif_warning = 5
+                    former_sid = sr[2]
+                    former_signal = sr[1]
                     if spdlim > ospeed:
                         light[1] = True
                     elif spdlim < ospeed:
@@ -1561,7 +1584,7 @@ def befread():
         time.sleep(2)
 
 def gsmgmt():
-    global failures, power, SCHUTZ_PROB, apress, evolts, eamps, efreq, sysinfo, syspages, csyspage, cpsrc, passdz, curspeed, caccel, thrust, spdlim, lastspdlim, zusatz_lastspdlim, curlkj, zugat, light
+    global failures, power, SCHUTZ_PROB, apress, evolts, eamps, efreq, sysinfo, syspages, csyspage, cpsrc, passdz, curspeed, caccel, thrust, spdlim, lastspdlim, zusatz_lastspdlim, curlkj, zugat, light, dif_warning
     s = open("blackbox.csv", "a")
     ticker = 0
     while True:
@@ -1700,7 +1723,7 @@ def afb():
             time.sleep(1)
 
 def render_3d():
-    global extcmd, RENDER, accuer, asuber
+    global extcmd, RENDER, accuer, asuber, dif_warning
     print("Render thread running")
     while True:
         try:
@@ -1711,6 +1734,8 @@ def render_3d():
             resp.close()
         except Exception as e:
             pass
+        if dif_warning > 0:
+            dif_warning -= 1
         time.sleep(0.2)
 
 #turtle.right(90)
