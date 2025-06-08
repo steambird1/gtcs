@@ -513,15 +513,18 @@ def sdscan(sname,cdist=0,refdist=4500):
 # Return acceleration
 def sdeval(scanres,vist,vsoll=240):
     accel = 0
+    adis = 10**8
     # km/h
     vziel = vist
     #print(scanres)
     if vist > vsoll:
         accel = -4
         vziel = vsoll
+        adis = 0
     elif vist > vsoll - 10:
         accel = -1
         vziel = vsoll
+        adis = 0
     for i in scanres:
         csp = [int(i[0])] + i[1].split(" ")
         dis = int(csp[0])
@@ -539,7 +542,8 @@ def sdeval(scanres,vist,vsoll=240):
             if caccel < accel:
                 accel = caccel
                 vziel = vkmh
-    return (accel, vziel)
+                adis = dis
+    return (accel, vziel, adis)
 
 @app.route("/signaldata")
 def signaldata():
@@ -1050,6 +1054,9 @@ def red_tackle():
                     red_timer[i][1] -= 1
                     if red_timer[i][1] <= 0 or red_timer[i][0] >= 10:
                         red_timer[i][2] = False
+            for i in avoid_state:
+                if avoid_state[i] > 0:
+                    avoid_state[i] -= 1
         except Exception as e:
             print(e)
         time.sleep(1)
@@ -1067,23 +1074,26 @@ def trainsview():
                 try:
                     if trains[i][1] == "" or trains[i][4] == "":
                         tj = ([], (10**8))
+                        zeitplan[i] = datetime.datetime.now()
                     else:
                         tj = train_dijkstra(trains[i][4], trains[i][1], True)
-                        zeitplan[i] = datetime.datetime.now()
                     if (request.args.get("pax") == "open") or (request.args.get("pax") in tj[0]):
-                        etd = datetime.timedelta(hours=(tj[1] / 1000) / (0.75 * trains[i][2]))
-                        eta = datetime.datetime.now() + etd
-                        einfo = "On Schuedule"
-                        if i not in zeitplan:
-                            zeitplan[i] = eta
-                        elif (eta - zeitplan[i]) > datetime.timedelta(hours=1):
-                            rmin = int((eta - zeitplan[i]).total_seconds() / 60)
-                            einfo = '<span style="color: red; font-weight: 700;">Delayed for {} hr {} min</span>'.format(str(rmin//60),str(rmin%60))
-                        elif (eta - zeitplan[i]) > datetime.timedelta(minutes=5):
-                            einfo = '<span style="color: orange; font-weight: 700;">Delayed for {} min</span>'.format(str(int((eta - zeitplan[i]).total_seconds() / 60)))
+                        try:
+                            etd = datetime.timedelta(hours=(tj[1] / 1000) / (0.75 * trains[i][2]))
+                            eta = datetime.datetime.now() + etd
+                            einfo = "On Schuedule"
+                            if i not in zeitplan:
+                                zeitplan[i] = eta
+                            elif (eta - zeitplan[i]) > datetime.timedelta(hours=1):
+                                rmin = int((eta - zeitplan[i]).total_seconds() / 60)
+                                einfo = '<span style="color: red; font-weight: 700;">Delayed for {} hr {} min</span>'.format(str(rmin//60),str(rmin%60))
+                            elif (eta - zeitplan[i]) > datetime.timedelta(minutes=5):
+                                einfo = '<span style="color: orange; font-weight: 700;">Delayed for {} min</span>'.format(str(int((eta - zeitplan[i]).total_seconds() / 60)))
+                        except Exception as e:
+                            print("Error in evaluation of Zeitplan",str(e))
+                        tdata.append([i, (translation[trains[i][1]] if trains[i][1] in translation else "--"), (zeitplan[i].strftime("%H:%M")), einfo])
                 except Exception as e:
                     print("Error in passenger view",str(e))
-                tdata.append([i, (translation[trains[i][1]] if trains[i][1] in translation else "--"), (zeitplan[i].strftime("%H:%M")), einfo])
             return render_template("paxinner.html", tdata=tdata)
         else:
             return render_template("trainview.html", trains=trains, round=round)
@@ -1128,7 +1138,7 @@ def trainop():
         if not check_auth(request.args.get("auth"), TRAIN_AUTH):
             return "Operation not permitted", 400
         name = request.args.get("name").replace("_", " ")
-        name = name.replace("^","_")
+        name = name.replace("^", "_")
         v = request.args.get("spd")
         cv = request.args.get("vist")
         loc = request.args.get("sname")
@@ -1184,14 +1194,39 @@ def train_dijkstra(von, nach, pass_red=False, max_len=(10**9)):
 TMAX = 15
 tlastcall = {}
 
+def try_diverg(i, pres):
+    global zugin, trains, signals, originals
+    flag = False
+    if zugin[pres] in trains:
+        if trains[zugin[pres]][2] > trains[i][2]:
+            #print("Attempting to configure diverging track")
+            flag = True
+            for j in signals[trains[i][4]][3]:
+                if ("_park" in j) and (zugin[j] not in trains):
+                    divergcall(trains[i][4], j)
+                    originals[j] = signals[j][2]
+                    signals[j][2] = "4"
+                    try:
+                        ziel = signals[j][3][signals[j][4]]
+                        originals[ziel] = signals[ziel][2]
+                        signals[ziel][2] = "-"
+                        red_timer[ziel][1] = 120
+                    except Exception as e:
+                        print("Error in diverging",str(e))
+                    print("Configured by using",j)
+                    break
+    return flag
+
+total_delay = 0
+
 def tsimu():
-    global trains, ZOOM, zeitplan, deact_cnt, warninfo, tlastcall
+    global trains, ZOOM, zeitplan, deact_cnt, warninfo, tlastcall, total_delay
     termcnt = 0
     idle = 0
     lastcall = time.time()
     while True:
         # Generation
-        print("Tick train simulator,",termcnt,"train(s) has ever arrived","| Last idle:",idle)
+        print("Tick train simulator,",termcnt,"train(s) has ever arrived","| Last idle:",idle,"| Total delay:",int(total_delay))
         idle = 0
         ct = time.time()
         if (random.randint(1, 1000) <= TS_DENSITY) and (len(trains) < TMAX):
@@ -1223,11 +1258,12 @@ def tsimu():
                         tlastcall[i] = time.time()
                     vziel = 0
                     zaccel = 0
+                    zdis = 0
                     future = ""
                     try:
                         future = signals[trains[i][4]][3][signals[trains[i][4]][4]]
-                        zaccel, vziel = sdeval(sdscan(trains[i][4],-trains[i][5],12000),trains[i][3],trains[i][2])
-                        print("Train",i,"acc=",zaccel,"vziel=",vziel)
+                        zaccel, vziel, zdis = sdeval(sdscan(trains[i][4],-trains[i][5],12000),trains[i][3],trains[i][2])
+                        #print("Train",i,"acc=",zaccel,"vziel=",vziel)
                     except Exception as e:
                         print("Train processor error", str(e))
                         continue
@@ -1238,6 +1274,14 @@ def tsimu():
                             trains[i][3] += random.randint(30, 40) / 10
                         else:
                             trains[i][3] += random.randint(-5, 5) / 10
+                        if (vziel <= 10) and (zdis < 400):
+                            if zdis > 50:
+                                if trains[i][3] < 30:
+                                    trains[i][3] += random.randint(20, 30) / 10
+                                elif trains[i][3] > 40:
+                                    trains[i][3] -= random.randint(30, 40) / 10
+                            else:
+                                trains[i][3] -= random.randint(50, 60) / 10
                         if trains[i][3] < 0:
                             trains[i][3] = 0
                         trains[i][5] += (trains[i][3] / 3.6) * (time.time() - tlastcall[i])
@@ -1252,7 +1296,12 @@ def tsimu():
                                 tlastcall.pop(i)
                                 trains.pop(i)
                                 done = True
-                                print("End of train career",i)
+                                cdelay = 0
+                                if i in zeitplan:
+                                    if datetime.datetime.now() > zeitplan[i]:
+                                        cdelay = (datetime.datetime.now() - zeitplan[i]).total_seconds() / 60
+                                total_delay += cdelay
+                                print("End of train career",i,"with",cdelay,"min delay")
                                 termcnt += 1
                                 break
                             # TODO: CALL OF ENTER HERE IS INCORRECT ?
@@ -1269,15 +1318,30 @@ def tsimu():
                             if deact_cnt[i] > 60:
                                 if trains[i][4] in signals:
                                     zugcall(trains[i][4], "1", i)
-                                warninfo += "<p>[Info] Train {} lost contact</p>".format(i)
+                                    warninfo += "<p>[Info] Train {} lost contact at {}</p>".format(i, trains[i][4])
                                 tlastcall.pop(i)
                                 trains.pop(i)
                                 continue
                     if trains[i][7] and (trains[i][1] in signals) and (trains[i][4] in signals):
-                        route = train_dijkstra(trains[i][4], trains[i][1], True)[0]
+                        flag = False
+                        if i in avoid_state:
+                            flag = (avoid_state[i] > 0)
+                        if trains[i][4] in prev:
+                            pres = prev[trains[i][4]]
+                            # TODO: Pres-pres also work
+                            flag = try_diverg(i, pres)
+                            if pres in prev:
+                                flag = flag or try_diverg(i, prev[pres])
+                            if flag:
+                                avoid_state[i] = 60
+                        if flag:
+                            print("Train",i,"is trying to avoid a train")
+                        route = []
+                        if not flag:
+                            route = train_dijkstra(trains[i][4], trains[i][1], True)[0]
                         #print("Attempt for diverg",i,"path",route[:3])
                         #print("Process auto diverging",i,"with","actual",signals[route[1]][3][signals[route[1]][4]],"ideal",route[2])
-                        if len(route) > 1:
+                        if (len(route) > 1) and (not flag):
                             if (signals[route[0]][3][signals[route[0]][4]] != route[1]):
                                 divergcall(route[0], route[1])
                             if (len(route) > 2) and (signals[route[1]][3][signals[route[1]][4]] != route[2]):
@@ -1294,6 +1358,8 @@ def tsimu():
                                         print("Unable to configure diverging track", str(e))
                             elif (signals[route[1]][2] in [RED, REDYELLOW]) and ((route[1] not in zugin) or (zugin[route[1]] == "") or (zugin[route[1]] == i)):
                                 signals[route[1]][2] = "-"
+                                if signals[route[1]][2] == RED and zugin[route[1]] == i:
+                                    red_timer[route[1]] = [0, 240, True]
                                 report_signal_mod(route[1])
                 except Exception as e:
                     print("Error",str(e))
@@ -1301,6 +1367,7 @@ def tsimu():
             print("Error",str(e))
         lastcall = plastcall
         while time.time() < (ct+1):
+            idle += 1
             time.sleep(0.05)
 
 if __name__ == '__main__':

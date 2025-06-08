@@ -941,19 +941,22 @@ def trainsview():
                     else:
                         tj = train_dijkstra(trains[i][4], trains[i][1], True)
                     if (request.args.get("pax") == "open") or (request.args.get("pax") in tj[0]):
-                        etd = datetime.timedelta(hours=(tj[1] / 1000) / (0.75 * trains[i][2]))
-                        eta = datetime.datetime.now() + etd
-                        einfo = "On Schuedule"
-                        if i not in zeitplan:
-                            zeitplan[i] = eta
-                        elif (eta - zeitplan[i]) > datetime.timedelta(hours=1):
-                            rmin = int((eta - zeitplan[i]).total_seconds() / 60)
-                            einfo = '<span style="color: red; font-weight: 700;">Delayed for {} hr {} min</span>'.format(str(rmin//60),str(rmin%60))
-                        elif (eta - zeitplan[i]) > datetime.timedelta(minutes=5):
-                            einfo = '<span style="color: orange; font-weight: 700;">Delayed for {} min</span>'.format(str(int((eta - zeitplan[i]).total_seconds() / 60)))
+                        try:
+                            etd = datetime.timedelta(hours=(tj[1] / 1000) / (0.75 * trains[i][2]))
+                            eta = datetime.datetime.now() + etd
+                            einfo = "On Schuedule"
+                            if i not in zeitplan:
+                                zeitplan[i] = eta
+                            elif (eta - zeitplan[i]) > datetime.timedelta(hours=1):
+                                rmin = int((eta - zeitplan[i]).total_seconds() / 60)
+                                einfo = '<span style="color: red; font-weight: 700;">Delayed for {} hr {} min</span>'.format(str(rmin//60),str(rmin%60))
+                            elif (eta - zeitplan[i]) > datetime.timedelta(minutes=5):
+                                einfo = '<span style="color: orange; font-weight: 700;">Delayed for {} min</span>'.format(str(int((eta - zeitplan[i]).total_seconds() / 60)))
+                        except Exception as e:
+                            print("Error in evaluation of Zeitplan",str(e))
+                        tdata.append([i, (translation[trains[i][1]] if trains[i][1] in translation else "--"), (zeitplan[i].strftime("%H:%M")), einfo])
                 except Exception as e:
                     print("Error in passenger view",str(e))
-                tdata.append([i, (translation[trains[i][1]] if trains[i][1] in translation else "--"), (zeitplan[i].strftime("%H:%M")), einfo])
             return render_template("paxinner.html", tdata=tdata)
         else:
             return render_template("trainview.html", trains=trains, round=round)
@@ -1222,6 +1225,8 @@ def tsimu():
                                         print("Unable to configure diverging track", str(e))
                             elif (signals[route[1]][2] in [RED, REDYELLOW]) and ((route[1] not in zugin) or (zugin[route[1]] == "") or (zugin[route[1]] == i) or (zugin[route[1]] not in trains)):
                                 signals[route[1]][2] = "-"
+                                if signals[route[1]][2] == RED and zugin[route[1]] == i:
+                                    red_timer[route[1]] = [0, 240, True]
                                 # Report signal mod !!!
                 except Exception as e:
                     print("Error",str(e))
