@@ -818,6 +818,23 @@ contnz = 0
 plog = []
 tcnter1 = 0
 
+def submit_loc(czugat=None):
+    global zugat, accuer
+    cszugat = czugat
+    csaccuer = int(accuer)
+    if cszugat is None:
+        cszugat = zugat
+    else:
+        csaccuer = 1
+    try:
+        u = urlopen(TCTR + "?mode=submit&auth=" + AUTH + "&name=" + ZUGNAME + "&spd=120&vist=" + str(
+            int(curspeed)) + "&sname=" + cszugat + "&dev=" + str(csaccuer))
+        u.close()
+        return True
+    except Exception as e:
+        g3err.append(time.ctime() + " GTCS Befehl Submit: " + str(e))
+        return False
+
 def physics():
     global lastspdlim, tcnter1, plog, contnz, caccel, limitz, accuer, curspeed, thrust, gtcsinfo, accreq, power, acreqspd, LEVEL, schutz, schutz_info, sysinfo, zusatz_lastspdlim
     if power < 0 or curspeed < 20:
@@ -1163,6 +1180,7 @@ geschw = 120
 def update_loc(target):
     global geschw, curlkj, prereded, accuer, lastspdlim, g3err, LEVEL, zugat, spdlim, accreq, ZUGNAME, autog3, ospeed, AUTH
     try:
+        submit_loc(target)
         if zugat != "":
             u = urlopen(ZCTR + "?sid=" + zugat + "&type=1&name=" + ZUGNAME + "&auth=" + AUTH)
             u.read()
@@ -1575,12 +1593,7 @@ def befread():
                 befshow()
         except Exception as e:
             g3err.append(time.ctime() + " GTCS Befehl: " + str(e))
-        try:
-            u = urlopen(TCTR + "?mode=submit&auth=" + AUTH + "&name=" + ZUGNAME + "&spd=120&vist=" + str(
-                int(curspeed)) + "&sname=" + zugat + "&dev=" + str(int(accuer)))
-            u.close()
-        except Exception as e:
-            g3err.append(time.ctime() + " GTCS Befehl Submit: " + str(e))
+        submit_loc()
         time.sleep(2)
 
 def gsmgmt():
