@@ -726,6 +726,7 @@ def render_gtcs_main():
     thrturtle.circle(80, power/3)
     thrturtle.goto(160, 80)
     thrturtle.end_fill()
+    spdraw.clear()
     spdraw.goto(-160, 70)
     spdraw.fillcolor('white')
     spdraw.pencolor('black')
@@ -737,6 +738,7 @@ def render_gtcs_main():
     spdraw.goto(-160, 80)
     # spdraw.
     spdraw.write(str(int(curspeed)), align='center', font=FONT)
+    cthrdraw.clear()
     cthrdraw.penup()
     cthrdraw.goto(160, 70)
     cthrdraw.fillcolor('white')
