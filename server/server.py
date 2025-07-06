@@ -8,6 +8,9 @@ from PIL import Image
 import urllib
 import random
 import datetime
+import os
+import sys
+import signal as sigs
 
 app = Flask("FountaineMTR")
 
@@ -63,6 +66,7 @@ with_train = {}
 trains = {}
 zeitplan = {}
 deact_cnt = {}
+avoid_state = {}
 
 def getmd5(s):
     return hashlib.md5(s.encode('utf-8')).hexdigest()
@@ -74,6 +78,8 @@ AUTH_FREE = False
 TRAIN_AUTH = [getmd5("jeangunnhildr"), getmd5("_~_amber~_~")]
 CTRL_AUTH = [getmd5("no_klee_here_!")]
 BEFEHL_AUTH = [getmd5("barbatos'_wish^)")]
+# Replace this to something else !!!
+KERNEL_AUTH = [getmd5("I_guess_you_can_hear:),right?!")]
 
 RECM_FREE = False
 
@@ -246,11 +252,11 @@ signals["M_dn_lyg_ext"][3].append("I_up1")
 
 draw_line("I_up",5,-200,300,-200,5)
 draw_line("I_up",300,-200,300,200,5)
-addstation("I_up", "Inazuma", 0, 2, 0, 3, "I_dn")
+addstation("I_up", "Inazuma", 0, 2, 0, 3, "I_dn", "Inazuma")
 draw_line("I_up",305,205,305,155,5)
 addstation("I_up", "Watatsumi", 0, -2, 0, -3, "I_dn")
 draw_line("I_dn",305,160,305,155,5)
-addstation("I_dn", "Watatsumi", 0, 2, 0, 3, "I_up")
+addstation("I_dn", "Watatsumi", 0, 2, 0, 3, "I_up", "Watatsumi")
 draw_line("I_dn",305,155,305,205,5)
 addstation("I_dn", "Inazuma", 0, -2, 0, -3, "I_up")
 draw_line("I_dn",300,200,300,-200,5)
@@ -268,7 +274,7 @@ def generate_for(name,c1=2,c2=8,mnspd=10,mxspd=20):
             addinfos[sname] = []
         lz = int(length(sname)*ZOOM)
         while cdis <= lz:
-            cst = randz(0, 100)
+            cst = randz(0, 500)
             if cst <= c1:
                 addinfos[sname].append([cdis, "P0"])
                 cdis += randz(100, 200)
@@ -299,6 +305,26 @@ draw_line("F_dn",-800,600,-5,-205,-5)
 signals["M_lyg_gleis3_ext"][3].append("F_up1")
 signals[getlatest("F_dn")][3].append("M_lyg_gleis3_ent")
 signals[getlatest("F_dn")][4] = 1
+
+# Fountaine
+signals["F_up_Fountaine_ext"][3].append("FC_up_Fountaine_ent")
+draw_line("FC_up",-805,605,-810,605,5)
+addstation("FC_up","Fountaine",-2,0,-3,0,"FC_dn", "Fountaine (Subway)")
+draw_line("FC_up",-810,605,-810,545,5)
+addstation("FC_up","Romantime",0,-2,0,-3,"FC_dn","Romantime")
+draw_line("FC_dn",-810,540,-810,545,5)
+addstation("FC_dn","Romantime",0,2,0,3,"FC_up")
+draw_line("FC_dn",-810,545,-810,605,5)
+addstation("FC_dn","Fountaine",0,2,0,3,"FC_up")
+signals["FC_dn_Fountaine_ext"][3].append("F_dn_Fountaine_ent")
+for proc in ["FC_up", "FC_dn"]:
+    for it in range(1, sids[proc]):
+        i = proc + str(it)
+        if i not in addinfos:
+            addinfos[i] = []
+        addinfos[i].append([0, "La 0 80"])
+        for j in range(1000, int(length(i)*ZOOM), 1000):
+            addinfos[i].append([j, "S {}_{}m .".format(i, str(j))])
 
 for i in range(10,150,10):
     signals["F_up"+str(i)][3].append("F_dn"+str(sids["F_dn"]-i))
@@ -342,7 +368,7 @@ def update_signal(name,ovrd=None):
         if signals[name][2] not in [RED, GREEN]:
             turtle.write(name + ": " + signals[name][2] + extra, False, "center", ("Arial", 10, "normal"))
         else:
-            turtle.write(name + extra, False, "center", ("Arial", 10, "normal"))     
+            turtle.write(name + extra, False, "center", ("Arial", 10, "normal"))
     turtle.goto(signals[name][1][0],signals[name][1][1])
     turtle.penup()
 
@@ -396,15 +422,18 @@ def sdscan(sname,cdist=0,refdist=4500):
 # Return acceleration
 def sdeval(scanres,vist,vsoll=240):
     accel = 0
+    adis = 10**8
     # km/h
     vziel = vist
     #print(scanres)
     if vist > vsoll:
         accel = -4
         vziel = vsoll
+        adis = 0
     elif vist > vsoll - 10:
         accel = -1
         vziel = vsoll
+        adis = 0
     for i in scanres:
         csp = [int(i[0])] + i[1].split(" ")
         dis = int(csp[0])
@@ -422,7 +451,8 @@ def sdeval(scanres,vist,vsoll=240):
             if caccel < accel:
                 accel = caccel
                 vziel = vkmh
-    return (accel, vziel)
+                adis = dis
+    return (accel, vziel, adis)
 
 @app.route("/signaldata")
 def signaldata():
@@ -434,6 +464,14 @@ def signaldata():
     rsc = sdscan(sname,-sdev,NORMREFDIST+sdev)
     res = str(int(length(sname)*ZOOM)-sdev) + "\n" + "\n".join([" ".join(i) for i in rsc])
     return res
+
+def update_addata(sname, sdis, stgt):
+    for i in range(len(addinfos[sname])):
+        if addinfos[sname][i][0] > int(sdis):
+            addinfos[sname].insert(i, [int(sdis), stgt])
+            break
+    else:
+        addinfos[sname].append([int(sdis), stgt])
 
 @app.route("/addataupdate")
 def addataupdate():
@@ -455,12 +493,7 @@ def addataupdate():
                 return "Element not found", 400
             return "Removal completed successfully"
         else:
-            for i in range(len(addinfos[sname])):
-                if addinfos[sname][i][0] > int(sdis):
-                    addinfos[sname].insert(i, [int(sdis), stgt])
-                    break
-            else:
-                addinfos[sname].append([int(sdis), stgt])
+            update_addata(sname, sdis, stgt)
             return "Operation completed successfully"
     except Exception as e:
         return "Internal server error: " + str(e), 500
@@ -761,15 +794,52 @@ def state():
 def dashboard():
     return render_template("dashboard.html")
 
+def server_restart():
+    """
+    global app
+    py = sys.executable
+    print("!!! SERVER RESTARTING IN 2S !!!",py,sys.argv)
+    time.sleep(2)
+    #app.stop()
+    # For windows operation system only!!1
+    tmpscript = open("tmp.bat", "w")
+    tmpscript.write("@echo off\n")
+    tmpscript.write("ping 127.0.0.1 -n 12\n")
+    tmpscript.write("pushd " + os.getcwd() + "\n")
+    tmpscript.write("py " + " ".join(sys.argv) + "\n")
+    tmpscript.close()
+    os.system("start tmp.bat")
+    print("Ready to exit")
+    pid = os.getpid()
+    os.kill(pid, sigs.SIGTERM)
+    """
+    return None
+
+
 @app.route("/msg")
 def msg():
-    global warninfo
+    global warninfo, KERNEL_AUTH, termcnt, total_delay, active_issues
     mode = request.args.get("mode")
     if mode == "zeit":
         return time.ctime()
     elif mode == "clr":
         warninfo = ""
         return ""
+    elif mode == "reboot":
+        try:
+            auth = request.args.get("auth")
+            if check_auth(auth, KERNEL_AUTH):
+                tthr = threading.Thread(target=server_restart)
+                tthr.start()
+                return "Server restarting!"
+            else:
+                return "Bad password!"
+        except Exception as e:
+            return str(e)
+    elif mode == "stat":
+        return "Total arrival: {}<br />Total delay: {}".format(str(termcnt), str(total_delay))
+    elif mode == "issues":
+        return "<br />".join([active_issues[i][0] + ": " + str(active_issues[i][1]) + ", " + str(active_issues[i][2]) for i in active_issues])
     else:
         return warninfo
 
@@ -912,6 +982,9 @@ def red_tackle():
                     red_timer[i][1] -= 1
                     if red_timer[i][1] <= 0 or red_timer[i][0] >= 10:
                         red_timer[i][2] = False
+            for i in avoid_state:
+                if avoid_state[i] > 0:
+                    avoid_state[i] -= 1
         except Exception as e:
             print(e)
         time.sleep(1)
@@ -933,19 +1006,23 @@ def trainsview():
                     else:
                         tj = train_dijkstra(trains[i][4], trains[i][1], True)
                     if (request.args.get("pax") == "open") or (request.args.get("pax") in tj[0]):
-                        etd = datetime.timedelta(hours=(tj[1] / 1000) / (0.75 * trains[i][2]))
-                        eta = datetime.datetime.now() + etd
-                        einfo = "On Schuedule"
-                        if i not in zeitplan:
-                            zeitplan[i] = eta
-                        elif (eta - zeitplan[i]) > datetime.timedelta(hours=1):
-                            rmin = int((eta - zeitplan[i]).total_seconds() / 60)
-                            einfo = '<span style="color: red; font-weight: 700;">Delayed for {} hr {} min</span>'.format(str(rmin//60),str(rmin%60))
-                        elif (eta - zeitplan[i]) > datetime.timedelta(minutes=5):
-                            einfo = '<span style="color: orange; font-weight: 700;">Delayed for {} min</span>'.format(str(int((eta - zeitplan[i]).total_seconds() / 60)))
+                        try:
+                            etd = datetime.timedelta(hours=(tj[1] / 1000) / (0.75 * trains[i][2]))
+                            eta = datetime.datetime.now() + etd
+                            einfo = "On Schuedule"
+                            if i not in zeitplan:
+                                zeitplan[i] = eta
+                            elif (eta - zeitplan[i]) > datetime.timedelta(hours=1):
+                                rmin = int((eta - zeitplan[i]).total_seconds() / 60)
+                                einfo = '<span style="color: red; font-weight: 700;">Delayed for {} hr {} min</span>'.format(str(rmin//60),str(rmin%60))
+                            elif (eta - zeitplan[i]) > datetime.timedelta(minutes=5):
+                                einfo = '<span style="color: orange; font-weight: 700;">Delayed for {} min</span>'.format(str(int((eta - zeitplan[i]).total_seconds() / 60)))
+                        except Exception as e:
+                            print("Error in evaluation of Zeitplan",str(e))
+                        tdata.append([i, (translation[trains[i][1]] if trains[i][1] in translation else "--"), (zeitplan[i].strftime("%H:%M")), einfo])
                 except Exception as e:
                     print("Error in passenger view",str(e))
-                tdata.append([i, (translation[trains[i][1]] if trains[i][1] in translation else "--"), (zeitplan[i].strftime("%H:%M")), einfo])
+                #tdata.append([i, (translation[trains[i][1]] if trains[i][1] in translation else "--"), (zeitplan[i].strftime("%H:%M")), einfo])
             return render_template("paxinner.html", tdata=tdata)
         else:
             return render_template("trainview.html", trains=trains, round=round)
@@ -1043,38 +1120,71 @@ def train_dijkstra(von, nach, pass_red=False, max_len=(10**14)):
         cur = dvon[cur]
     return (track[::-1], dis[nach])
 
-TMAX = 15
+TMAX = 40
 tlastcall = {}
 
+def try_diverg(i, pres):
+    global zugin, trains, signals, originals
+    flag = False
+    if zugin[pres] in trains:
+        if trains[zugin[pres]][2] > trains[i][2]:
+            #print("Attempting to configure diverging track")
+            flag = True
+            for j in signals[trains[i][4]][3]:
+                if ("_park" in j) and (zugin[j] not in trains):
+                    divergcall(trains[i][4], j)
+                    originals[j] = signals[j][2]
+                    signals[j][2] = "4"
+                    try:
+                        ziel = signals[j][3][signals[j][4]]
+                        originals[ziel] = signals[ziel][2]
+                        signals[ziel][2] = "-"
+                        red_timer[ziel][1] = 120
+                    except Exception as e:
+                        print("Error in diverging",str(e))
+                    print("Configured by using",j)
+                    break
+    return flag
+
+total_delay = 0
+termcnt = 0
+
+_errhd1 = None
+
 def tsimu():
-    global trains, ZOOM, zeitplan, deact_cnt, warninfo, tlastcall
-    termcnt = 0
+    global termcnt, trains, ZOOM, zeitplan, deact_cnt, warninfo, tlastcall, total_delay, _errhd1
+
     idle = 0
     lastcall = time.time()
     while True:
         # Generation
-        print("Tick train simulator,",termcnt,"train(s) has ever arrived","| Last idle:",idle)
+        print("Tick train simulator,",termcnt,"train(s) has ever arrived","| Last idle:",idle,"| Total delay:",int(total_delay))
+        print("Error handled",_errhd1)
         idle = 0
         ct = time.time()
-        if (random.randint(1, 1000) <= TS_DENSITY) and (len(trains) < TMAX):
-            mode = random.choice(["IC", "ICE", "RE", "G", "D", "Z", "T", "K"])
-            vsoll = 120
-            if mode in ["ICE", "G", "D"]:
-                vsoll = 240
-            von = ""
-            while (von.strip() == "") or ((von in zugin) and (zugin[von].strip() != "")):
-                von = random.choice(red_at_exit)
-            # Maybe use ent???
-            nach = random.choice(red_at_exit)
-            sid = random.randint(1, 1000)
-            zname = mode + " " + str(sid)
-            if translate(signals[von][2]) <= 0:
-                signals[von][2] = "-"
-            zugin[von] = zname
-            trains[zname] = [von, nach, vsoll, 0, von, 0, True, True]
-            zugcall(von, "0", zname)
-            rlen = train_dijkstra(von, nach, True)[1]
-            zeitplan[zname] = datetime.datetime.now() + datetime.timedelta(hours=((rlen / 1000) / (0.75 * vsoll)))
+        try:
+            if (random.randint(1, 1000) <= TS_DENSITY) and (len(trains) < TMAX):
+                mode = random.choice(["IC", "ICE", "RE", "G", "D", "Z", "T", "K"])
+                vsoll = 120
+                if mode in ["ICE", "G", "D"]:
+                    vsoll = 240
+                von = ""
+                while (von.strip() == "") or ((von in zugin) and (zugin[von].strip() != "")):
+                    von = random.choice(red_at_exit)
+                # Maybe use ent???
+                nach = random.choice(red_at_exit)
+                sid = random.randint(1, 1000)
+                zname = mode + " " + str(sid)
+                if translate(signals[von][2]) <= 0:
+                    signals[von][2] = "-"
+                zugin[von] = zname
+                trains[zname] = [von, nach, vsoll, 0, von, 0, True, True]
+                zugcall(von, "0", zname)
+                rlen = train_dijkstra(von, nach, True)[1]
+                zeitplan[zname] = datetime.datetime.now() + datetime.timedelta(hours=((rlen / 1000) / (0.75 * vsoll)))
+        except Exception as e:
+            print("ERROR in creating trains!!!",str(e))
+            _errhd1 = e
 
         # Normal operation for all trains
         plastcall = time.time()
@@ -1085,25 +1195,35 @@ def tsimu():
                         tlastcall[i] = time.time()
                     vziel = 0
                     zaccel = 0
+                    zdis = 0
                     future = ""
                     try:
                         future = signals[trains[i][4]][3][signals[trains[i][4]][4]]
                         #vziel = min(translate(signals[future][2]), trains[i][2])
-                        zaccel, vziel = sdeval(sdscan(trains[i][4],-trains[i][5],12000),trains[i][3],trains[i][2])
+                        zaccel, vziel, zdis = sdeval(sdscan(trains[i][4],-trains[i][5],12000),trains[i][3],trains[i][2])
                         #print("Train",i,"acc=",zaccel,"vziel=",vziel)
                     except Exception as e:
                         print("Train processor error", str(e))
                         continue
                     if trains[i][6]:
+                        #print("Train",i,":",vziel,zaccel,zdis)
                         if zaccel < -0.5:
                             trains[i][3] += (zaccel * 3.6 * (time.time() - tlastcall[i])) + (random.randint(-5, 5) / 10)
                         elif zaccel > -0.1:
                             trains[i][3] += random.randint(30, 40) / 10
                         else:
                             trains[i][3] += random.randint(-5, 5) / 10
+                        if (vziel <= 10) and (zdis < 400):
+                            if zdis > 50:
+                                if trains[i][3] < 30:
+                                    trains[i][3] += random.randint(20, 30) / 10
+                                elif trains[i][3] > 40:
+                                    trains[i][3] -= random.randint(30, 40) / 10
+                            else:
+                                trains[i][3] -= random.randint(50, 60) / 10
                         if trains[i][3] < 0:
                             trains[i][3] = 0
-                        print("Updating train",i,"by",(trains[i][3] / 3.6),"*",(time.time() - tlastcall[i]))
+                        #print("Updating train",i,"by",(trains[i][3] / 3.6),"*",(time.time() - tlastcall[i]))
                         trains[i][5] += (trains[i][3] / 3.6) * (time.time() - tlastcall[i])
                         tlastcall[i] = time.time()
                         clen = length(trains[i][4]) * ZOOM
@@ -1116,7 +1236,12 @@ def tsimu():
                                 tlastcall.pop(i)
                                 trains.pop(i)
                                 done = True
-                                print("End of train career",i)
+                                cdelay = 0
+                                if i in zeitplan:
+                                    if datetime.datetime.now() > zeitplan[i]:
+                                        cdelay = (datetime.datetime.now() - zeitplan[i]).total_seconds() / 60
+                                total_delay += cdelay
+                                print("End of train career",i,"with",cdelay,"min delay")
                                 termcnt += 1
                                 break
                             # TODO: CALL OF ENTER HERE IS INCORRECT ?
@@ -1133,15 +1258,32 @@ def tsimu():
                             if deact_cnt[i] > 60:
                                 if trains[i][4] in signals:
                                     zugcall(trains[i][4], "1", i)
-                                warninfo += "<p>[Info] Train {} lost contact</p>".format(i)
+                                warninfo += "<p>[Info] Train {} lost contact at {}</p>".format(i, trains[i][4])
                                 tlastcall.pop(i)
                                 trains.pop(i)
                                 continue
                     if trains[i][7] and (trains[i][1] in signals) and (trains[i][4] in signals):
-                        route = train_dijkstra(trains[i][4], trains[i][1], True)[0]
+                        if (not trains[i][6]) and (signals[trains[i][4]][2] == "-"):
+                            signals[trains[i][4]][2] = "0"
+                        flag = False
+                        if i in avoid_state:
+                            flag = (avoid_state[i] > 0)
+                        if trains[i][4] in prev:
+                            pres = prev[trains[i][4]]
+                            # TODO: Pres-pres also work
+                            flag = try_diverg(i, pres)
+                            if pres in prev:
+                                flag = flag or try_diverg(i, prev[pres])
+                            if flag:
+                                avoid_state[i] = 60
+                        if flag:
+                            print("Train",i,"is trying to avoid a train")
+                        route = []
+                        if not flag:
+                            route = train_dijkstra(trains[i][4], trains[i][1], True)[0]
                         #print("Attempt for diverg",i,"path",route[:3])
                         #print("Process auto diverging",i,"with","actual",signals[route[1]][3][signals[route[1]][4]],"ideal",route[2])
-                        if len(route) > 1:
+                        if (len(route) > 1) and (not flag):
                             if (signals[route[0]][3][signals[route[0]][4]] != route[1]):
                                 divergcall(route[0], route[1])
                             if (len(route) > 2) and (signals[route[1]][3][signals[route[1]][4]] != route[2]):
@@ -1157,8 +1299,10 @@ def tsimu():
                                         # Report signal mod !!!
                                     except Exception as e:
                                         print("Unable to configure diverging track", str(e))
-                            elif (signals[route[1]][2] in [RED, REDYELLOW]) and ((route[1] not in zugin) or (zugin[route[1]] == "") or (zugin[route[1]] == i)):
+                            elif (signals[route[1]][2] in [RED, REDYELLOW]) and ((route[1] not in zugin) or (zugin[route[1]] == "") or (zugin[route[1]] == i) or (zugin[route[1]] not in trains)):
                                 signals[route[1]][2] = "-"
+                                if signals[route[1]][2] == RED and zugin[route[1]] == i:
+                                    red_timer[route[1]] = [0, 240, True]
                                 # Report signal mod !!!
                 except Exception as e:
                     print("Error",str(e))
@@ -1168,6 +1312,73 @@ def tsimu():
         while time.time() < (ct+1):
             idle += 1
             time.sleep(0.05)
+
+
+# of 1000
+SPECIAL_PROB = 10
+# [type, time remaining, external data]
+active_issues = {}
+
+def special_events():
+    global signals, originals, active_issues
+    while True:
+        try:
+            spc = random.randint(1, 10000)
+            if spc <= SPECIAL_PROB:
+                # 1. Blocked roads
+                # 2. Hillchurl/Abyssmagi/... (H/A/E/U)
+                # 3. Maintenance along
+                spid = random.randint(1, 100000)
+                spt = random.choice(["B", "M"])
+                sgn = random.choice(list(signals))
+                sgns = []
+                # INSERT ONLY THE DISTANCES!!!
+                arb = []
+                for i in sdscan(sgn, 400):
+                    sdata = i[1].split(" ")
+                    if sdata[0] == "S":
+                        sgns.append(sdata[1])
+                if spt == "B":
+                    for j in sgns:
+                        originals[j] = signals[j][2]
+                        signals[j][2] = PROHIBIT
+                    arb = sgns
+                elif spt == "M":
+                    asp = random.randint(40, 250)
+                    dt = random.randint(10, 50)
+                    for j in sgns:
+                        arb.append([j, dt])
+                        update_addata(j, dt, "La 0 " + str(asp))
+                        # 180, 1200:
+                active_issues[spid] = [spt, random.randint(180, 2500), arb]
+                print("Adding issue",spid)
+            # Check ending of active issues:
+            for i in active_issues:
+                if active_issues[i][1] <= 0:
+                    # Undo in accordance
+                    if active_issues[i][0] == "B":
+                        for j in active_issues[i][2]:
+                            if j in originals:
+                                signals[j][2] = originals[j]
+                            else:
+                                signals[j][2] = GREEN
+                    elif active_issues[i][2] == "M":
+                        for j in active_issues[i][2]:
+                            # [signal, sdata]
+                            for k in range(len(addinfos[active_issues[i][2][j][0]])):
+                                if addinfos[active_issues[i][2][j][0]][k][0] == active_issues[i][2][j][1]:
+                                    addinfos[active_issues[i][2][j][0]].pop(k)
+                                    break
+                            else:
+                                print("Unable to recover change in",j)
+                    active_issues.pop(i)
+                    print("Removing issue",i)
+                    continue
+                active_issues[i][1] -= 1
+        except Exception as e:
+            print("sge error",str(e))
+        time.sleep(1)
+
 
 if __name__ == '__main__':
     for i in signals:
@@ -1181,6 +1392,8 @@ if __name__ == '__main__':
     tr.start()
     ts = threading.Thread(target=tsimu)
     ts.start()
+    tp = threading.Thread(target=special_events)
+    tp.start()
     print("Graphics start")
     for i in signals:
         scan_signal(i)
