@@ -1,4 +1,5 @@
 import turtle
+import math
 import time
 from urllib.request import urlopen
 from urllib import request
@@ -73,9 +74,21 @@ appdz = False
 # Superconduct is not a failure sometimes, depending on what you need.
 # Volts High == Charged sometimes
 apress = 0
+cevolts = 0
+ceamps = 0
 evolts = 0
 eamps = 0
 efreq = 50
+# Unit: A*h
+# Maintained by the same thread.
+battery_charge = 5
+MAX_BAT_CAPACITY = 200
+batvolts = 0
+batamps = 0
+batregen = False
+onbat = False
+servolts = 0
+#servamps = 0
 
 # 'a' or 'e'
 cpsrc = "a"
@@ -121,8 +134,37 @@ failures = {
     "ovldr": ["Element Overload", False, lambda: False],
     "scond": ["Element Superconduct", False, lambda: False],
     "eblock": ["Crystalize Blocking", False, lambda: False],
-    "logerr": ["Recorder Failure", False, lambda: False]
+    "logerr": ["Recorder Failure", False, lambda: False],
+    "panto1": ["Pantograph 1 Failure", False, lambda: False],
+    "panto2": ["Pantograph 2 Failure", False, lambda: False],
+    "motor1": ["Electro Motor 1", False, lambda: False],
+    "motor2": ["Electro Motor 2", False, lambda: False],
+    "batlo": ["Electro Battery Low", False, lambda: (battery_charge < 1)],
+    "bepwrlo": ["Electro BAT Volts Low", False, lambda: ((batvolts < 1000))],
+    "bepwrhi": ["Electro BAT Volts High", False, lambda: batvolts > 3000],
+    "bepwrslo": ["Electro BAT Amps Low", False, lambda: ((batamps < 0.1))],
+    "bepwrshi": ["Electro BAT Amps High", False, lambda: batamps > 100],
+    "depwrlo": ["Electro DC Service Volts Low", False, lambda: ((servolts < 18))],
+    "depwrhi": ["Electro DC Service Volts High", False, lambda: servolts > 64]
 }
+# balo also has special events
+
+def each_panto_amps():
+    if cpsrc != "p":
+        return 0
+    cnt = 2
+    if failures["panto1"][1]:
+        cnt -= 1
+    if failures["panto2"][1]:
+        cnt -= 1
+    if cnt <= 0:
+        return 0
+    return (ceamps / cnt) + random.randint(1,20)/10
+
+def each_panto_volts():
+    if cpsrc != "p":
+        return 0
+    return cevolts + random.randint(30,300)/10
 
 was_failure = {}
 sch_failure = []
@@ -135,14 +177,26 @@ for i in range(1,17):
 
 for i in failures:
     was_failure[i] = False
+    
+def ok_motor_count():
+    return (0 if failures["motor1"][1] else 1) + (0 if failures["motor2"][1] else 1)
 
 def maxthr_val():
-    global apress, evolts, eamps, cpsrc
+    global apress, cevolts, ceamps, batvolts, batamps, cpsrc, failures
+    res = 0
+    ok_motor = ok_motor_count()
     if cpsrc == "a":
-        return apress * 1.5
+        res = apress * 1.5
     else:
-        return (evolts * eamps) / 250
+        res = ((cevolts + batvolts) * max(ceamps, batamps)) / 750
+    return res * (ok_motor) / 2
 
+def motor_out():
+    global thrust, curspeed
+    if ok_motor_count() > 0:
+        return power / ok_motor_count()
+    else:
+        return 0
 
 ps_queue = deque()
 
@@ -193,6 +247,7 @@ spdhint = turtle.Turtle()
 gaspress = turtle.Turtle()
 routedisp = turtle.Turtle()
 cthrdraw = turtle.Turtle()
+amdraw = turtle.Turtle()
 t = turtle.Pen()
 
 if DARK:
@@ -212,6 +267,7 @@ if DARK:
     spdhint.pencolor('white')
     gaspress.pencolor('white')
     cthrdraw.pencolor('white')
+    amdraw.pencolor('white')
 
 spdturtle.penup()
 thrturtle.penup()
@@ -228,6 +284,7 @@ spdhint.penup()
 gaspress.penup()
 routedisp.penup()
 cthrdraw.penup()
+amdraw.penup()
 maxspder.goto(-160, 80)
 acreqer.goto(-160, 0)
 spdhint.goto(-155, 5)
@@ -253,6 +310,7 @@ spdhint.speed('fastest')
 gaspress.speed('fastest')
 routedisp.speed('fastest')
 cthrdraw.speed('fastest')
+amdraw.speed('fastest')
 befehldisp.pensize(2)
 turtle2.pensize(2)
 turtle3.pensize(2)
@@ -287,6 +345,7 @@ lkjdraw.hideturtle()
 gaspress.hideturtle()
 routedisp.hideturtle()
 cthrdraw.hideturtle()
+amdraw.hideturtle()
 
 if LEVEL < 2:
     limdraw.hideturtle()
@@ -304,6 +363,200 @@ xcolor = ["white"] * 10
 # light = [True]*10
 light = [True, False, False, False, False, False, False, False, False, False, False]
 
+ovrd_main_disp = False
+ovrd_page = 'a'
+
+# Must be called AFTER main processor
+def render_anemo_power():
+    global apress, FONT, failures, evolts, eamps, cpsrc, battery_charge, batvolts, batamps, batregen, cevolts, ceamps
+    amdraw.goto(-160, -120)
+    amdraw.clear()
+    if ovrd_main_disp:
+        if ovrd_page == 'a':
+            # -160, -100
+            amdraw.goto(-70, -120)
+            amdraw.pendown()
+            amdraw.goto(-70, -160)
+            amdraw.goto(-150, -160)
+            amdraw.goto(-150, -120)
+            amdraw.goto(-70, -120)
+            amdraw.penup()
+            amdraw.goto(-110, -135)
+            amdraw.write("Anemo M", align='center', font=FONT)
+            amdraw.goto(-110, -150)
+            amtext = ("{} MPa".format(round(apress, 1)))
+            amcolor = ("red" if (((cpsrc == "a") and (apress < 10)) or apress > 200) else MYGREEN)
+            amdraw.pencolor(amcolor)
+            amdraw.write(amtext, align='center', font=FONT)
+            amdraw.pencolor(MYWHITE)
+            amdraw.goto(-70, -140)
+            amdraw.pendown()
+            if cpsrc == "a":
+                amdraw.pencolor(MYGREEN)
+            amdraw.goto(-40, -140)
+            amdraw.pencolor(MYWHITE)
+            amdraw.write("Thrust Out", align='left', font=FONT)
+            amdraw.penup()
+        elif ovrd_page == 'e':
+            amdraw.goto(-130, -140)
+            amdraw.pencolor(MYWHITE)
+            if cpsrc == "p":
+                amdraw.pencolor(MYGREEN)
+            if failures["panto1"][1]:
+                amdraw.pencolor("orange")
+            amdraw.write("Panto 1", align='center', font=FONT)
+            amdraw.pencolor(MYWHITE)
+            amdraw.goto(-130, -155)
+            amdraw.write(str(0 if failures["panto1"][1] else round(each_panto_volts(), 1)) + "V", font=FONT)
+            amdraw.goto(-130, -170)
+            amdraw.write(str(0 if failures["panto1"][1] else round(each_panto_amps(), 1)) + "A", font=FONT)
+            amdraw.goto(130, -140)
+            if cpsrc == "p":
+                amdraw.pencolor(MYGREEN)
+            if failures["panto2"][1]:
+                amdraw.pencolor("orange")
+            amdraw.write("Panto 2", align='center', font=FONT)
+            amdraw.pencolor(MYWHITE)
+            amdraw.goto(130, -155)
+            amdraw.write(str(0 if failures["panto2"][1] else round(each_panto_volts(), 1)) + "V", font=FONT)
+            amdraw.goto(130, -170)
+            amdraw.write(str(0 if failures["panto2"][1] else round(each_panto_amps(), 1)) + "A", font=FONT)
+            if cpsrc == "p":
+                amdraw.pencolor(MYGREEN)
+            amdraw.goto(-130, -185)
+            amdraw.pendown()
+            amdraw.goto(-130, -260)
+            amdraw.penup()
+            amdraw.goto(130, -185)
+            amdraw.pendown()
+            amdraw.goto(130, -260)
+            amdraw.penup()
+            # (-195, -225) areas:
+            amdraw.pencolor(MYWHITE)
+            exvolts = cevolts
+            examps = ceamps
+            if cpsrc == "e":
+                amdraw.pencolor(MYGREEN)
+            else:
+                exvolts = 0
+                examps = 0
+            amdraw.goto(-110, -185)
+            amdraw.pendown()
+            amdraw.goto(110,-185)
+            amdraw.goto(110,-245)
+            amdraw.goto(-110,-245)
+            amdraw.goto(-110,-185)
+            amdraw.penup()
+            amdraw.goto(0,-215)
+            amdraw.write("Electro", align='center', font=FONT)
+            amdraw.pencolor(MYWHITE)
+            amdraw.goto(-75,-230)
+            if exvolts > 3000 or exvolts < 10:
+                amdraw.pencolor("red")
+            amdraw.write(str(round(exvolts,1)) + " V", align="left", font=FONT)
+            amdraw.pencolor(MYWHITE)
+            amdraw.goto(75,-230)
+            if examps > 100 or examps < 0.1:
+                amdraw.pencolor("red")
+            amdraw.write(str(round(examps,1)) + " A", align="right", font=FONT)
+            amdraw.pencolor(MYWHITE)
+            amdraw.goto(-110, -275)
+            amdraw.pendown()
+            amdraw.goto(110, -275)
+            amdraw.goto(110, -320)
+            amdraw.goto(-110, -320)
+            amdraw.goto(-110, -275)
+            amdraw.penup()
+            amdraw.goto(-75,-290)
+            amdraw.write("Battery", align='left', font=FONT)
+            amdraw.goto(75,-290)
+            if battery_charge < 1:
+                amdraw.pencolor("red")
+            amdraw.write(str(round(battery_charge,1)) + " Ah", align="right", font=FONT)
+            amdraw.pencolor(MYWHITE)
+            amdraw.goto(-75,-305)
+            if batvolts > 3000 or batvolts < 10:
+                amdraw.pencolor("red")
+            amdraw.write(str(round(batvolts,1)) + " V", align="left", font=FONT)
+            amdraw.pencolor(MYWHITE)
+            amdraw.goto(75,-305)
+            if batamps > 100 or batamps < 0.1:
+                amdraw.pencolor("red")
+            amdraw.write(str(round(batamps,1)) + " A", align="right", font=FONT)
+            amdraw.pencolor(MYWHITE)
+            amdraw.goto(-130, -260)
+            amdraw.pendown()
+            if (evolts * eamps) > 300:
+                amdraw.pencolor(MYGREEN)
+            else:
+                amdraw.pencolor(MYWHITE)
+            amdraw.goto(-110, -260)
+            amdraw.penup()
+            # Service bus
+            amdraw.goto(-130, -210)
+            amdraw.write("Service Bus", align="right", font=FONT)
+            amdraw.goto(-130, -225)
+            if servolts < 16 or servolts > 64:
+                amdraw.pencolor("red")
+            amdraw.write(str(round(servolts, 1)) + " V", align="right", font=FONT)
+            amdraw.pencolor(MYWHITE)
+            amdraw.penup()
+            # Service bus
+            amdraw.goto(130, -195)
+            amdraw.write("Main Bus", align="left", font=FONT)
+            amdraw.goto(130, -210)
+            if evolts < 0.1 or evolts > 3000:
+                amdraw.pencolor("red")
+            amdraw.write(str(round(evolts, 1)) + " V", align="left", font=FONT)
+            amdraw.pencolor(MYWHITE)
+            amdraw.goto(130, -225)
+            if eamps < 0.1 or eamps > 100:
+                amdraw.pencolor("red")
+            amdraw.write(str(round(eamps, 1)) + " A", align="left", font=FONT)
+            amdraw.pencolor(MYWHITE)
+            amdraw.goto(-110, -260)
+            if batregen:
+                amdraw.pencolor(MYBLUE)
+            elif (evolts * eamps) > 1500:
+                amdraw.pencolor(MYGREEN)
+            else:
+                amdraw.pencolor(MYWHITE)
+            amdraw.pendown()
+            amdraw.goto(130, -260)
+            amdraw.penup()
+            amdraw.goto(-130,-260)
+            amdraw.pendown()
+            amdraw.goto(-130,-280)
+            amdraw.penup()
+            amdraw.goto(130,-260)
+            amdraw.pendown()
+            amdraw.goto(130,-280)
+            amdraw.penup()
+            m1out = round(motor_out() + random.randint(1,20) / 10,1)
+            if failures["motor1"][1]:
+                amdraw.pencolor("orange")
+                m1out = 0
+            amdraw.goto(-150,-290)
+            amdraw.write("Motor 1", align='center', font=FONT)
+            amdraw.goto(-150,-305)
+            amdraw.write(str(round(m1out,1)) + " kW", align='center', font=FONT)
+            
+            if batregen:
+                amdraw.pencolor(MYBLUE)
+            elif (evolts * eamps) > 1500:
+                amdraw.pencolor(MYGREEN)
+            else:
+                amdraw.pencolor(MYWHITE)
+            m2out = round(motor_out() + random.randint(1,20) / 10,1)
+            if failures["motor2"][1]:
+                amdraw.pencolor("orange")
+                m2out = 0
+            amdraw.goto(150,-290)
+            amdraw.write("Motor 2", align='center', font=FONT)
+            amdraw.goto(150,-305)
+            amdraw.write(str(round(m2out,1)) + " kW", align='center', font=FONT)
+            amdraw.penup()
+            amdraw.pencolor(MYWHITE)
 
 def render_bar():
     turtle3.clear()
@@ -771,30 +1024,36 @@ def render_gtcs_main():
             gfailind = False
         gaspress.write(str(gpress), align='center', font=FONT)
     # Generate info
-    if has_afb:
-        gtcsinfo.append(["AFB Enabled", MYGREEN])
-    if passenger_call != "":
-        gtcsinfo.append(["Passenger Call - Press H", MYWHITE])
-    for i in failures:
-        if failures[i][1] or (failures[i][2]()):
-            gtcsinfo.append([failures[i][0], "maroon1"])
-            if not was_failure[i]:
-                start_sound("warning")
-    for i in gtcsinfo:
-        if DARK and i[1] == "blue":
-            i[1] = "cyan"
-        infobar.pencolor(i[1])
-        infobar.pendown()
-        infobar.write(i[0], font=FONT)
-        infobar.penup()
-        infobar.goto(infobar.xcor(), infobar.ycor() - 30)
-    infobar.goto(120, -120)
-    for i in sysinfo:
-        infobar.pencolor(i[1])
-        infobar.pendown()
-        infobar.write(i[0], font=FONT)
-        infobar.penup()
-        infobar.goto(infobar.xcor(), infobar.ycor() - 30)
+    if not ovrd_main_disp:
+        if has_afb:
+            gtcsinfo.append(["AFB Enabled", MYGREEN])
+        if passenger_call != "":
+            gtcsinfo.append(["Passenger Call - Press H", MYWHITE])
+        if onbat:
+            gtcsinfo.append(["On Battery", "orange"])
+        if batregen:
+            gtcsinfo.append(["Battery Regeneration", MYBLUE])
+        for i in failures:
+            if failures[i][1] or (failures[i][2]()):
+                gtcsinfo.append([failures[i][0], "maroon1"])
+                if not was_failure[i]:
+                    start_sound("warning")
+        for i in gtcsinfo:
+            if DARK and i[1] == "blue":
+                i[1] = "cyan"
+            infobar.pencolor(i[1])
+            infobar.pendown()
+            infobar.write(i[0], font=FONT)
+            infobar.penup()
+            infobar.goto(infobar.xcor(), infobar.ycor() - 30)
+        infobar.goto(120, -120)
+        for i in sysinfo:
+            infobar.pencolor(i[1])
+            infobar.pendown()
+            infobar.write(i[0], font=FONT)
+            infobar.penup()
+            infobar.goto(infobar.xcor(), infobar.ycor() - 30)
+    render_anemo_power()
     if curlkj == "0" or curlkj == "00":
         if curlkj == "00" or prereded:
             lkj_draw("red")
@@ -925,16 +1184,19 @@ def submit_loc(czugat=None):
         g3err.append(time.ctime() + " GTCS Befehl Submit: " + str(e))
         return False
 
+lastupdate_t = time.time()
+
 def physics():
-    global lastspdlim, tcnter1, plog, contnz, caccel, limitz, accuer, curspeed, thrust, gtcsinfo, accreq, power, acreqspd, LEVEL, schutz, schutz_info, sysinfo, zusatz_lastspdlim
+    global lastupdate_t, lastspdlim, tcnter1, plog, contnz, caccel, limitz, accuer, curspeed, thrust, gtcsinfo, accreq, power, acreqspd, LEVEL, schutz, schutz_info, sysinfo, zusatz_lastspdlim
     if power < 0 or curspeed < 20:
         thrust = power / 2
     else:
         thrust = power / (curspeed / 10)
     thrust -= 10
-    accuer += (curspeed / 3.6) * 0.2
+    accuer += (curspeed / 3.6) * (time.time() - lastupdate_t)
     caccel = thrust / 50
-    curspeed += thrust / 50
+    curspeed += thrust / 50 * ((time.time() - lastupdate_t) / 0.2)
+    lastupdate_t = time.time()
     if (thrust > 0) and light[1]:
         tcnter1 += 1
         if tcnter1 > 20:
@@ -1204,25 +1466,25 @@ def wind_release():
 
 
 def elec_charge():
-    global eamps, evolts, on_keyboard
+    global ceamps, cevolts, on_keyboard
     if on_keyboard:
         keyboard_add('k')
         return
-    evolts += random.randint(10, 30)
-    eamps += random.randint(10, 30) / 20
+    cevolts += random.randint(10, 30)
+    ceamps += random.randint(10, 30) / 20
 
 
 def elec_release():
-    global eamps, evolts, on_keyboard
+    global ceamps, cevolts, on_keyboard
     if on_keyboard:
         keyboard_add('l')
         return
-    evolts -= random.randint(10, 30)
-    eamps -= random.randint(10, 30) / 20
-    if evolts < 0:
-        evolts = 0
-    if eamps < 0:
-        eamps = 0
+    cevolts -= random.randint(10, 30)
+    ceamps -= random.randint(10, 30) / 20
+    if cevolts < 0:
+        cevolts = 0
+    if ceamps < 0:
+        ceamps = 0
 
 
 def swtc_pwr():
@@ -1261,6 +1523,23 @@ def change_afb():
     if not has_afb:
         start_sound('caution')
 
+def show_switch():
+    global on_keyboard, ovrd_main_disp
+    if on_keyboard:
+        keyboard_add('m')
+        return
+    ovrd_main_disp = not ovrd_main_disp
+
+def chg_switch():
+    global on_keyboard, ovrd_page
+    if on_keyboard:
+        keyboard_add('n')
+        return
+    if ovrd_page == 'a':
+        ovrd_page = 'e'
+    else:
+        ovrd_page = 'a'
+
 t.screen.onkey(wind_charge, 'o')
 t.screen.onkey(wind_release, 'p')
 t.screen.onkey(elec_charge, 'k')
@@ -1268,6 +1547,8 @@ t.screen.onkey(elec_release, 'l')
 t.screen.onkey(swtc_pwr, 'a')
 t.screen.onkey(panto_swtc, 's')
 t.screen.onkey(change_afb, 'g')
+t.screen.onkey(show_switch, 'm')
+t.screen.onkey(chg_switch, 'n')
 
 t.screen.onkey(name_disp, '0')
 
@@ -1283,7 +1564,7 @@ def syspage_switch(ckey):
 for i in syspages:
     t.screen.onkey(eval("lambda: syspage_switch('{}')".format(i)), i)
 
-for i in '12tyuidfjzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM':
+for i in '12tyuidfjzxcvbQWERTYUIOPASDFGHJKLZXCVBNM':
     t.screen.onkey(eval("lambda: keyboard_add('{}')".format(i)), i)
 
 t.screen.onkey(lambda: keyboard_add('_'), ',')
@@ -1763,7 +2044,7 @@ def befread():
 
 
 def gsmgmt():
-    global failures, power, SCHUTZ_PROB, apress, evolts, eamps, efreq, sysinfo, syspages, csyspage, cpsrc, passdz, curspeed, caccel, thrust, spdlim, lastspdlim, zusatz_lastspdlim, curlkj, zugat, light, passenger_call
+    global failures, power, SCHUTZ_PROB, apress, evolts, eamps, cevolts, ceamps, efreq, sysinfo, syspages, csyspage, cpsrc, passdz, curspeed, caccel, thrust, spdlim, lastspdlim, zusatz_lastspdlim, curlkj, zugat, light, dif_warning, batvolts, batamps, batregen, servolts, onbat, battery_charge
     s = open("blackbox_high_speed.csv","a")
     ticker = 0
     while True:
@@ -1790,30 +2071,96 @@ def gsmgmt():
             if apress < 200:
                 apress += random.randint(10, 40) / 10
         if failures["epwrlo"][1] or failures["eblock"][1]:
-            if evolts > 10:
-                evolts -= random.randint(10, 40) / 10
+            if cevolts > 10:
+                cevolts -= random.randint(10, 40) / 10
         if failures["epwrhi"][1] or failures["ovldr"][1]:
-            if evolts < 3000:
-                evolts += random.randint(10, 40) / 10
+            if cevolts < 3000:
+                cevolts += random.randint(10, 40) / 10
         if failures["epwrslo"][1] or failures["eblock"][1]:
-            if eamps > 0.1:
-                eamps -= random.randint(10, 40) / 10
+            if ceamps > 0.1:
+                ceamps -= random.randint(10, 40) / 10
         if failures["epwrshi"][1] or failures["scond"][1]:
-            if eamps < 100:
-                eamps += random.randint(10, 40) / 20
+            if ceamps < 100:
+                ceamps += random.randint(10, 40) / 20
+        if failures["bepwrlo"][1] or failures["eblock"][1]:
+            if batvolts > 10:
+                batvolts -= random.randint(10, 40) / 10
+        if failures["bepwrhi"][1] or failures["ovldr"][1]:
+            if batvolts < 3000:
+                batvolts += random.randint(10, 40) / 10
+        if failures["bepwrslo"][1] or failures["eblock"][1]:
+            if batamps > 0.1:
+                batamps -= random.randint(10, 40) / 10
+        if failures["bepwrshi"][1] or failures["scond"][1]:
+            if batamps < 100:
+                batamps += random.randint(10, 40) / 20
+        servolts = batvolts / 50
+        if failures["depwrlo"][1] or failures["eblock"][1]:
+            if servolts > 16:
+                servolts -= random.randint(10, 40) / 10
+        if failures["depwrhi"][1] or failures["ovldr"][1]:
+            if servolts < 64:
+                servolts += random.randint(10, 40) / 10
+        
         sysinfo = []
         for i in syspages[csyspage]:
             sysinfo.append([i[0](), i[1]()])
         if cpsrc == "p":
-            if passdz:
-                evolts = 0
-                eamps = 0
+            if passdz or (failures["panto1"][1] and failures["panto2"][1]):
+                cevolts = 0
+                ceamps = 0
             else:
-                evolts = 2500
-                eamps = 80
+                cevolts = 2500
+                ceamps = 80
+        if cevolts + 10 > batvolts:
+            onbat = False
+        if (not onbat):
+            evolts = cevolts
+            eamps = ceamps
+            evolts += (random.randint(0, 10) - 5) / 10
+            eamps += (random.randint(0, 10) - 5) / 50
+            akpower = cevolts * ceamps
+        else:
+            akpower = evolts * eamps
         apress += (random.randint(0, 10) - 5) / 10
-        evolts += (random.randint(0, 10) - 5) / 10
-        eamps += (random.randint(0, 10) - 5) / 50
+        if ceamps < 0.01:
+            ceamps = 0.01
+        if eamps < 0.01:
+            eamps = 0.01
+        batregen = False
+        # Evaluate battery volts:
+        if battery_charge < 0.1:
+            battery_charge = 0.1
+        batvolts = math.log(battery_charge*20000/MAX_BAT_CAPACITY, 2.3)*200
+        batamps = (batvolts)/50 + (random.randint(-45,45)/100)
+        chvolts = 20
+        chvolts = ((power * 720)) / eamps
+        if power < 0:
+            resi = random.randint(170,205)
+            eamps = (abs(power * 720) / resi)**0.5
+            chvolts = -eamps * resi
+        #print("pre;;chv=",chvolts,"ce:",cevolts,ceamps,"ev=",evolts,"ea=",eamps,onbat,batregen)
+        if cpsrc == "a":
+            chvolts = 20
+        if (cevolts < chvolts + 10):
+            # Not so physics, I think
+            #chvolts = (power * curspeed / 3.6 * 25) / batamps
+            rate = (chvolts - cevolts) / batvolts
+            evolts = chvolts
+            #print("Battery rate",rate)
+            eamps = batamps
+            onbat = True
+            battery_charge -= batamps * rate / 3600
+        elif cevolts - chvolts > 20:
+            onbat = False
+            #batvolts = cevolts - chvolts - 20
+            #evolts = cevolts - chvolts
+            batamps = eamps
+            batregen = True
+            if battery_charge < MAX_BAT_CAPACITY:
+                battery_charge += batamps * (cevolts - chvolts) / batvolts / 4000
+            # 3600 with something else
+        #print("aft;;chv=",chvolts,"ev=",evolts,"ea=",eamps,onbat,batregen)
         if apress < 0:
             apress = 0
         if evolts < 0:
@@ -1838,7 +2185,9 @@ def gsmgmt():
             failures["logerr"][1] = True
         else:
             failures["logerr"][1] = False
-        time.sleep(0.1)
+        if curspeed <= 0.1 and power < 0:
+            power = 0
+        time.sleep(0.01)
 
 
 def afb():
@@ -1905,7 +2254,7 @@ def afb():
 
 def render_3d():
     global extcmd, RENDER, accuer, asuber, dif_warning
-    print("Render thread running")
+    #print("Render thread running")
     while True:
         try:
             curdata = str(int(accuer)) + " " + str(int(asuber)) + "\n" + "\n".join(extcmd)
