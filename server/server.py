@@ -68,6 +68,8 @@ zeitplan = {}
 deact_cnt = {}
 avoid_state = {}
 
+train_routes = {}
+
 def getmd5(s):
     return hashlib.md5(s.encode('utf-8')).hexdigest()
 
@@ -1004,7 +1006,7 @@ def trainsview():
                         tj = ([], (10**8))
                         zeitplan[i] = datetime.datetime.now()
                     else:
-                        tj = train_dijkstra(trains[i][4], trains[i][1], True)
+                        tj = train_dijkstra(trains[i][4], trains[i][1], True, optimizer=i)
                     if (request.args.get("pax") == "open") or (request.args.get("pax") in tj[0]):
                         try:
                             etd = datetime.timedelta(hours=(tj[1] / 1000) / (0.75 * trains[i][2]))
@@ -1084,7 +1086,7 @@ def trainop():
     return "Invalid operation", 500
 
 # Return potential track, O(n^2)
-def train_dijkstra(von, nach, pass_red=False, max_len=(10**14)):
+def train_dijkstra_int(von, nach, pass_red=False, max_len=(10**14)):
     global signals, ZOOM
     #print("Execute dijkstra",von,nach)
     dis = {von:0}
@@ -1120,6 +1122,22 @@ def train_dijkstra(von, nach, pass_red=False, max_len=(10**14)):
         cur = dvon[cur]
     return (track[::-1], dis[nach])
 
+def train_dijkstra(von, nach, pass_red=False, max_len=(10**14), optimizer=""):
+    global train_routes
+    if optimizer == "" or (optimizer not in train_routes):
+        res = train_dijkstra_int(von, nach, pass_red, max_len)
+        train_routes[optimizer] = res
+        return res
+    else:
+        for i in range(len(train_routes[optimizer])):
+            if train_routes[optimizer][i] == von:
+                return train_routes[optimizer][i:]
+                break
+        else:
+            res = train_dijkstra_int(von, nach, pass_red, max_len)
+            train_routes[optimizer] = res
+            return res
+
 TMAX = 40
 tlastcall = {}
 
@@ -1151,6 +1169,7 @@ termcnt = 0
 
 _errhd1 = None
 
+
 def tsimu():
     global termcnt, trains, ZOOM, zeitplan, deact_cnt, warninfo, tlastcall, total_delay, _errhd1
 
@@ -1180,7 +1199,7 @@ def tsimu():
                 zugin[von] = zname
                 trains[zname] = [von, nach, vsoll, 0, von, 0, True, True]
                 zugcall(von, "0", zname)
-                rlen = train_dijkstra(von, nach, True)[1]
+                rlen = train_dijkstra(von, nach, True, optimizer=zname)[1]
                 zeitplan[zname] = datetime.datetime.now() + datetime.timedelta(hours=((rlen / 1000) / (0.75 * vsoll)))
         except Exception as e:
             print("ERROR in creating trains!!!",str(e))
@@ -1280,7 +1299,7 @@ def tsimu():
                             print("Train",i,"is trying to avoid a train")
                         route = []
                         if not flag:
-                            route = train_dijkstra(trains[i][4], trains[i][1], True)[0]
+                            route = train_dijkstra(trains[i][4], trains[i][1], True, optimizer=i)[0]
                         #print("Attempt for diverg",i,"path",route[:3])
                         #print("Process auto diverging",i,"with","actual",signals[route[1]][3][signals[route[1]][4]],"ideal",route[2])
                         if (len(route) > 1) and (not flag):
