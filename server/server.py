@@ -721,7 +721,7 @@ def signalset():
     return sstat
 
 def zugcall(sname, state, zugid):
-    global signals, warninfo, red_at_exit, TRAIN_AUTH, WARNING, PREWARNING
+    global signals, warninfo, red_at_exit, TRAIN_AUTH, WARNING, PREWARNING, trains, RED
     if state == "0":
         if signals[sname][2] == RED:
             warninfo += "<p style=\"color: red;\">[Alert] Train " + zugid + " passing Danger signal</p>\n"
@@ -750,8 +750,10 @@ def zugcall(sname, state, zugid):
         if zugin[sname] != zugid:
             warninfo += "<p style=\"color: orange;\">[Warning] Train " + zugid + " not entering " + sname + ", but exiting. It should have been '" + str(zugin[sname]) + "'.</p>\n"
             flag = False
-        if flag and (sname in originals) and (sname not in red_at_exit):
+        if (flag or (sname not in zugin) or (zugin[sname] not in trains)) and (sname in originals) and (sname not in red_at_exit):
             signals[sname][2] = originals[sname]
+        if sname in red_at_exit:
+            signals[sname][2] = RED
         with_train[sname] = False
         if sname in prev:
             ps = prev[sname]
@@ -797,24 +799,7 @@ def dashboard():
     return render_template("dashboard.html")
 
 def server_restart():
-    """
-    global app
-    py = sys.executable
-    print("!!! SERVER RESTARTING IN 2S !!!",py,sys.argv)
-    time.sleep(2)
-    #app.stop()
-    # For windows operation system only!!1
-    tmpscript = open("tmp.bat", "w")
-    tmpscript.write("@echo off\n")
-    tmpscript.write("ping 127.0.0.1 -n 12\n")
-    tmpscript.write("pushd " + os.getcwd() + "\n")
-    tmpscript.write("py " + " ".join(sys.argv) + "\n")
-    tmpscript.close()
-    os.system("start tmp.bat")
-    print("Ready to exit")
-    pid = os.getpid()
-    os.kill(pid, sigs.SIGTERM)
-    """
+    # Restart all threads, to be implemented.
     return None
 
 
@@ -831,9 +816,9 @@ def msg():
         try:
             auth = request.args.get("auth")
             if check_auth(auth, KERNEL_AUTH):
-                tthr = threading.Thread(target=server_restart)
-                tthr.start()
-                return "Server restarting!"
+                #tthr = threading.Thread(target=server_restart)
+                #tthr.start()
+                return "Server restart is unavailable for this version"
             else:
                 return "Bad password!"
         except Exception as e:
@@ -991,11 +976,11 @@ def red_tackle():
             print(e)
         time.sleep(1)
 
-TS_DENSITY = 500
+TS_DENSITY = 50
 
 @app.route("/trainview")
 def trainsview():
-    global trains, translation, zeitplan
+    global trains, translation, zeitplan, SCHED_TRAINS
     try:
         if "pax" in request.args:
             tdata = []
@@ -1021,7 +1006,10 @@ def trainsview():
                                 einfo = '<span style="color: orange; font-weight: 700;">Delayed for {} min</span>'.format(str(int((eta - zeitplan[i]).total_seconds() / 60)))
                         except Exception as e:
                             print("Error in evaluation of Zeitplan",str(e))
-                        tdata.append([i, (translation[trains[i][1]] if trains[i][1] in translation else "--"), (zeitplan[i].strftime("%H:%M")), einfo])
+                        idisp = i
+                        if i in SCHED_TRAINS:
+                            idisp = "<strong>" + i + "</strong>"
+                        tdata.append([idisp, (translation[trains[i][1]] if trains[i][1] in translation else "--"), (zeitplan[i].strftime("%H:%M")), einfo])
                 except Exception as e:
                     print("Error in passenger view",str(e))
                 #tdata.append([i, (translation[trains[i][1]] if trains[i][1] in translation else "--"), (zeitplan[i].strftime("%H:%M")), einfo])
@@ -1169,6 +1157,120 @@ termcnt = 0
 
 _errhd1 = None
 
+def generate_new_train(mode=None, von=None, nach=None, sid=None):
+    global red_at_exit, trains, zeitplan, _errhd1
+    try:
+        if mode is None:
+            mode = random.choice(["IC", "ICE", "RE", "G", "D", "Z", "T", "K"])
+        vsoll = 120
+        if mode in ["ICE", "G", "D"]:
+            vsoll = 240
+        if von is None:
+            von = ""
+            while (von.strip() == "") or ((von in zugin) and (zugin[von].strip() != "")):
+                von = random.choice(red_at_exit)
+        # Maybe use ent???
+        if nach is None:
+            nach = random.choice(red_at_exit)
+        if sid is None:
+            sid = random.randint(4000, 7000)
+        zname = mode + " " + str(sid)
+        if translate(signals[von][2]) <= 0:
+            signals[von][2] = "-"
+        zugin[von] = zname
+        trains[zname] = [von, nach, vsoll, 0, von, 0, True, True]
+        zugcall(von, "0", zname)
+        rlen = train_dijkstra(von, nach, True, optimizer=zname)[1]
+        zeitplan[zname] = datetime.datetime.now() + datetime.timedelta(hours=((rlen / 1000) / (0.75 * vsoll)))
+    except Exception as e:
+        print("ERROR in creating trains!!!",str(e))
+        _errhd1 = e
+
+# Thanks to Deepseek, but there are too fewer trains.
+# CONSIDER ADDERING OPPOSITE
+RAW_SCHED_TRAINS = {
+    "G1": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "05:00"],
+    "G3": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "06:00"],
+    "G5": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "07:00"],
+    "G7": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "08:00"],
+    "G9": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "09:00"],
+    "G11": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "11:00"],
+    "G13": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "13:00"],
+    "G15": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "15:00"],
+    "G17": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "17:00"],
+    "G19": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "19:00"],
+    "D2": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "05:30"],
+    "D4": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "06:30"],
+    "D6": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "07:30"],
+    "D8": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "08:30"],
+    "D10": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "09:30"],
+    "D12": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "11:30"],
+    "D14": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "13:30"],
+    "D16": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "15:30"],
+    "D18": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "17:30"],
+    "D20": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "19:30"],
+    "T5001": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "06:00"],
+    "T5003": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "10:00"],
+    "T5005": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "14:00"],
+    "T5007": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "18:00"],
+    "T5009": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "20:00"],
+    "K5002": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "06:30"],
+    "K5004": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "10:30"],
+    "K5006": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "14:30"],
+    "K5008": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "18:30"],
+    "K5010": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "20:30"],
+    "ICE8001": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "07:00"],
+    "ICE8003": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "08:00"],
+    "ICE8005": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "11:00"],
+    "ICE8007": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "15:00"],
+    "ICE8009": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "19:00"],
+    "IC8002": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "07:30"],
+    "IC8004": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "08:30"],
+    "IC8006": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "11:30"],
+    "IC8008": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "15:30"],
+    "IC8010": ["M_dn_Mondstadt_ext", "M_up_lyg_ext", "19:30"],
+    "G101": ["F_dn_Fountaine_ext", "M_up_lyg_ext", "05:00"],
+    "G103": ["F_dn_Fountaine_ext", "M_up_lyg_ext", "11:00"],
+    "D102": ["F_dn_Fountaine_ext", "M_up_lyg_ext", "06:00"],
+    "D104": ["F_dn_Fountaine_ext", "M_up_lyg_ext", "12:00"],
+    "T5101": ["F_dn_Fountaine_ext", "M_up_lyg_ext", "07:00"],
+    "T5103": ["F_dn_Fountaine_ext", "M_up_lyg_ext", "13:00"],
+    "K5102": ["F_dn_Fountaine_ext", "M_up_lyg_ext", "08:00"],
+    "K5104": ["F_dn_Fountaine_ext", "M_up_lyg_ext", "14:00"],
+    "ICE8101": ["F_dn_Fountaine_ext", "M_up_lyg_ext", "09:00"],
+    "IC8102": ["F_dn_Fountaine_ext", "M_up_lyg_ext", "10:00"],
+    "IC201": ["I_dn_Inazuma_ext", "I_up_Watatsumi_ext", "06:00"],
+    "IC203": ["I_dn_Inazuma_ext", "I_up_Watatsumi_ext", "07:00"],
+    "IC205": ["I_dn_Inazuma_ext", "I_up_Watatsumi_ext", "08:00"],
+    "IC207": ["I_dn_Inazuma_ext", "I_up_Watatsumi_ext", "09:00"],
+    "IC209": ["I_dn_Inazuma_ext", "I_up_Watatsumi_ext", "10:00"],
+    "IC211": ["I_dn_Inazuma_ext", "I_up_Watatsumi_ext", "12:00"],
+    "IC213": ["I_dn_Inazuma_ext", "I_up_Watatsumi_ext", "14:00"],
+    "IC215": ["I_dn_Inazuma_ext", "I_up_Watatsumi_ext", "16:00"],
+    "IC217": ["I_dn_Inazuma_ext", "I_up_Watatsumi_ext", "18:00"],
+    "IC219": ["I_dn_Inazuma_ext", "I_up_Watatsumi_ext", "20:00"],
+    "RE202": ["I_dn_Inazuma_ext", "I_up_Watatsumi_ext", "06:30"],
+    "RE204": ["I_dn_Inazuma_ext", "I_up_Watatsumi_ext", "07:30"],
+    "RE206": ["I_dn_Inazuma_ext", "I_up_Watatsumi_ext", "08:30"],
+    "RE208": ["I_dn_Inazuma_ext", "I_up_Watatsumi_ext", "09:30"],
+    "RE210": ["I_dn_Inazuma_ext", "I_up_Watatsumi_ext", "10:30"],
+    "RE212": ["I_dn_Inazuma_ext", "I_up_Watatsumi_ext", "12:30"],
+    "RE214": ["I_dn_Inazuma_ext", "I_up_Watatsumi_ext", "14:30"],
+    "RE216": ["I_dn_Inazuma_ext", "I_up_Watatsumi_ext", "16:30"],
+    "RE218": ["I_dn_Inazuma_ext", "I_up_Watatsumi_ext", "18:30"],
+    "RE220": ["I_dn_Inazuma_ext", "I_up_Watatsumi_ext", "20:30"]
+}
+
+SCHED_TRAINS = {}
+
+def fetch_train_name_info(tnstr):
+    try:
+        for i in range(len(tnstr)):
+            if tnstr[i].isdigit():
+                return (tnstr[:i], int(tnstr[i:]))
+    except:
+        pass
+    return (tnstr, -1)
 
 def tsimu():
     global termcnt, trains, ZOOM, zeitplan, deact_cnt, warninfo, tlastcall, total_delay, _errhd1
@@ -1183,26 +1285,13 @@ def tsimu():
         ct = time.time()
         try:
             if (random.randint(1, 1000) <= TS_DENSITY) and (len(trains) < TMAX):
-                mode = random.choice(["IC", "ICE", "RE", "G", "D", "Z", "T", "K"])
-                vsoll = 120
-                if mode in ["ICE", "G", "D"]:
-                    vsoll = 240
-                von = ""
-                while (von.strip() == "") or ((von in zugin) and (zugin[von].strip() != "")):
-                    von = random.choice(red_at_exit)
-                # Maybe use ent???
-                nach = random.choice(red_at_exit)
-                sid = random.randint(1, 1000)
-                zname = mode + " " + str(sid)
-                if translate(signals[von][2]) <= 0:
-                    signals[von][2] = "-"
-                zugin[von] = zname
-                trains[zname] = [von, nach, vsoll, 0, von, 0, True, True]
-                zugcall(von, "0", zname)
-                rlen = train_dijkstra(von, nach, True, optimizer=zname)[1]
-                zeitplan[zname] = datetime.datetime.now() + datetime.timedelta(hours=((rlen / 1000) / (0.75 * vsoll)))
+                generate_new_train()
+            for i in SCHED_TRAINS:
+                als = fetch_train_name_info(i)
+                if time.strftime("%H:%M") == SCHED_TRAINS[i][2]:
+                    generate_new_train(als[0], SCHED_TRAINS[i][0], SCHED_TRAINS[i][1], als[1])
         except Exception as e:
-            print("ERROR in creating trains!!!",str(e))
+            print("Error in routine processor",str(e))
             _errhd1 = e
 
         # Normal operation for all trains
@@ -1400,6 +1489,10 @@ def special_events():
 
 
 if __name__ == '__main__':
+    for i in RAW_SCHED_TRAINS:
+        iname = fetch_train_name_info(i)
+        SCHED_TRAINS[i] = RAW_SCHED_TRAINS[i]
+        SCHED_TRAINS[iname[0] + str(iname[1] + 1)] = [RAW_SCHED_TRAINS[i][1], RAW_SCHED_TRAINS[i][0], RAW_SCHED_TRAINS[i][2]]
     for i in signals:
         if i not in addinfos:
             #print("Addinfo assist",i)
