@@ -2,6 +2,8 @@
 
 Welcome to **GTCS Prototype**!
 
+~~It's due to my limited English skill that I named it in this way. I should have called it a model.~~
+
 This repository provides a prototype for GTCS (**G**eneral **T**rain (as well as Fountaine Cruise) **C**ontrol **S**ystem) used in Teyvat (can also be considered **G**unnhildr **T**rain **C**ontrol **S**ystem).
 
 ## Why GTCS?
