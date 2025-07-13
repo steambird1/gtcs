@@ -11,6 +11,17 @@ import datetime
 import os
 import sys
 import signal as sigs
+import heapq
+
+logf = open("main.log", "a")
+DEBUGOUT = True
+
+def print(*kxargs,end='\n',sep=' '):
+    kargs = [str(i) for i in kxargs]
+    info = sep.join(kargs)+end
+    if DEBUGOUT:
+        sys.stdout.write(info)
+    logf.write(time.ctime() + " " + info)
 
 app = Flask("FountaineMTR")
 
@@ -23,6 +34,7 @@ PREWARNING = "|"
 ERROR = "?"
 
 DANGEROUS = ["0", "-", "x", "?"]
+STOPPING = ["0", "x", "?", "1", "2", "3", "4"]
 
 ZOOM = 250
 SEED = 616
@@ -39,6 +51,9 @@ def randz(lower, upper):
     res = (SEED * SEED2 + SEED3) % SEED4
     SEED = res
     return res%(upper-lower)+lower
+    
+def name_process(x):
+    return x.replace("_", " ").replace("^", "_")
 
 # KLine graph
 signals = {}
@@ -214,8 +229,46 @@ addstation("M_dn","gly",0,-2,0,-3,"M_up")
 draw_line("M_dn",-10,-140,-10,-200,-5)
 addstation("M_dn","lyg",0,-2,0,-3,"M_up")
 
+_d1 = ["M_upt_lyg", "M_dnt_lyg", "M_lyg_gleis3_ent", "M_lyg_gleis3_ext", "M_lyg_gleis4_ent", "M_lyg_gleis4_ext"]
+_dpk = ["M_up_lyg_park1", "M_up_lyg_park2", "M_up_lyg_park3", "M_dn_lyg_park1", "M_dn_lyg_park2", "M_dn_lyg_park3"]
+
+for i in _d1:
+    signals[i][3] += _dpk
+for i in _dpk:
+    signals[i][3] += _d1
+
 signals["M_up2"][3].append("M_upt_lyg")
 signals["M_dn79"][3].append("M_dnt_lyg")
+
+# Snow mountain line
+draw_line("MS_up", 130,225,130,220,-5)
+addstation("MS_up", "Mondstadt",0,-2,0,-3, "MS_dn", "Mondstadt (Suburb)")
+draw_line("MS_up", 130,220,130,20,-5)
+addstation("MS_up", "Dragonspine",0,-2,0,-3, "MS_dn", "Dragonspine")
+draw_line("MS_up", 130,20,-10,20,-5)
+draw_line("MS_up", -10,20,-10,-135,-5)
+addstation("MS_up", "my", 0,-2,0,-3, "MS_dn", "Mingyun")
+draw_line("MS_up", -15,-140,-15,-195,-5)
+
+signals[getlatest("MS_up")][3].append("M_dn_lyg_ent")
+signals[getlatest("MS_up")][3].append("M_up_lyg_ent")
+signals["M_up_lyg_ext"][3].append(getlatest("MS_up"))
+signals["M_dn_lyg_ext"][3].append("MS_dn1")
+
+draw_line("MS_dn", -20,-195,-20,-140,5)
+# Special.
+signals["MS_dn1"].append("M_dn_lyg_ent")
+addstation("MS_dn", "my", 0,2,0,3, "MS_up")
+draw_line("MS_dn", -20,-135,-20,20,5)
+draw_line("MS_dn", -20,20,120,20,5)
+addstation("MS_dn", "Dragonspine",0,2,0,3, "MS_up")
+draw_line("MS_dn", 120,20,120,220,5)
+addstation("MS_dn", "Mondstadt", 0,2,0,3, "MS_up")
+
+signals["M_up_Mondstadt_ext"][3].append("MS_up_Mondstadt_ent")
+signals["MS_up_Mondstadt_ent"][3].append("M_up_Mondstadt_ext")
+signals["MS_dn_Mondstadt_ext"][3].append("M_dn_Mondstadt_ent")
+signals["M_dn_Mondstadt_ent"][3].append("MS_dn_Mondstadt_ext")
 
 draw_line("V_up",130,160,200,160,5)
 addstation("V_up", "Sternfall", 2, 0, 3, 0, "V_dn", "Sternfall")
@@ -295,6 +348,8 @@ generate_for("V_up")
 generate_for("V_dn")
 generate_for("S_up",8,20,6,15)
 generate_for("S_dn",8,20,6,15)
+generate_for("MS_up",12,30,6,15)
+generate_for("MS_dn",12,30,6,15)
 
 generate_for("I_up",1,18,5,20)
 generate_for("I_dn",1,18,5,20)
@@ -313,7 +368,7 @@ signals["F_up_Fountaine_ext"][3].append("FC_up_Fountaine_ent")
 draw_line("FC_up",-805,605,-810,605,5)
 addstation("FC_up","Fountaine",-2,0,-3,0,"FC_dn", "Fountaine (Subway)")
 draw_line("FC_up",-810,605,-810,545,5)
-addstation("FC_up","Romantime",0,-2,0,-3,"FC_dn","Romantime")
+addstation("FC_up","Romantime",0,-2,0,-3,"FC_dn","Romaritime")
 draw_line("FC_dn",-810,540,-810,545,5)
 addstation("FC_dn","Romantime",0,2,0,3,"FC_up")
 draw_line("FC_dn",-810,545,-810,605,5)
@@ -345,6 +400,14 @@ defaults = {}
 zugin = {}
 
 warninfo = ""
+
+def warnprint(*kxargs,end='\n',sep=' '):
+    global warninfo
+    info = sep.join(kxargs)+end
+    print("[Generated warning begin]")
+    print(info)
+    print("[Generated warning end]")
+    warninfo += info
 
 def update_signal(name,ovrd=None):
     global signals
@@ -720,16 +783,22 @@ def signalset():
     #update_signal(sname)
     return sstat
 
+exitings = set()
+
 def zugcall(sname, state, zugid):
-    global signals, warninfo, red_at_exit, TRAIN_AUTH, WARNING, PREWARNING, trains, RED
+    global signals, warninfo, red_at_exit, TRAIN_AUTH, WARNING, PREWARNING, trains, RED, GREEN, exitings
+    npz = name_process(zugid)
     if state == "0":
         if signals[sname][2] == RED:
-            warninfo += "<p style=\"color: red;\">[Alert] Train " + zugid + " passing Danger signal</p>\n"
+            warnprint("<p style=\"color: red;\">" + time.ctime() + " [Alert] Train " + zugid + " passing Danger signal</p>\n")
+        if (sname in zugin) and (zugin[sname] != "") and (zugin[sname] != npz):
+            warnprint("<p style=\"color: red;\">" + time.ctime() + " [Alert] Train " + zugid + " entering track occupied by " + zugin[sname] + "</p>\n")
         if not with_train[sname]:
             originals[sname] = signals[sname][2]
+        trains[npz][4] = sname
         signals[sname][2] = RED
         with_train[sname] = True
-        zugin[sname] = zugid
+        zugin[sname] = npz
         if sname in prev:
             ps = prev[sname]
             if not with_train[ps]:
@@ -744,14 +813,23 @@ def zugcall(sname, state, zugid):
                 with_train[pps] = True
                 if translate(signals[pps][2]) > translate(PREWARNING):
                     signals[pps][2] = PREWARNING
+        if npz in exitings:
+            exitings.remove(npz)
+        print(npz," * Called entrance at ",sname)
         return RED
     elif state == "1":
+        exitings.add(npz)
+        print(npz," * Called exit at ",sname)
         flag = True
-        if zugin[sname] != zugid:
-            warninfo += "<p style=\"color: orange;\">[Warning] Train " + zugid + " not entering " + sname + ", but exiting. It should have been '" + str(zugin[sname]) + "'.</p>\n"
+        if (sname in zugin) and ((zugin[sname] != npz)):
+            warnprint("<p style=\"color: orange;\">" + time.ctime() + " [Warning] Train " + npz + " not entering " + sname + ", but exiting. It should have been '" + str(zugin[sname]) + "'.</p>\n")
             flag = False
-        if (flag or (sname not in zugin) or (zugin[sname] not in trains)) and (sname in originals) and (sname not in red_at_exit):
-            signals[sname][2] = originals[sname]
+        if flag and (sname not in red_at_exit):
+            if (sname in originals) and (originals not in DANGEROUS):
+                signals[sname][2] = originals[sname]
+            else:
+                signals[sname][2] = GREEN
+            #print(">> Attempt to configure",sname,"resulted",signals[sname][2])
         if sname in red_at_exit:
             signals[sname][2] = RED
         with_train[sname] = False
@@ -802,10 +880,11 @@ def server_restart():
     # Restart all threads, to be implemented.
     return None
 
+external_dcall = {}
 
 @app.route("/msg")
 def msg():
-    global warninfo, KERNEL_AUTH, termcnt, total_delay, active_issues
+    global warninfo, KERNEL_AUTH, termcnt, total_delay, active_issues, red_timer, external_dcall, trains
     mode = request.args.get("mode")
     if mode == "zeit":
         return time.ctime()
@@ -827,8 +906,16 @@ def msg():
         return "Total arrival: {}<br />Total delay: {}".format(str(termcnt), str(total_delay))
     elif mode == "issues":
         return "<br />".join([active_issues[i][0] + ": " + str(active_issues[i][1]) + ", " + str(active_issues[i][2]) for i in active_issues])
+    elif mode == "rt":
+        return "<br />".join([str(i) + ": " + str(red_timer[i]) for i in red_timer])
     else:
-        return warninfo
+        dinfo = ""
+        for i in external_dcall:
+            if i not in trains:
+                external_dcall[i] = False
+            if external_dcall[i]:
+                dinfo += '<p style="color: blue;">[Diverg Note] Train {} has to divert to avoid another train</p>'.format(i)
+        return dinfo + "<br />" + warninfo
 
 zugbefehl={}
 
@@ -1056,8 +1143,7 @@ def trainop():
     elif mode == "submit":
         if not check_auth(request.args.get("auth"), TRAIN_AUTH):
             return "Operation not permitted", 400
-        name = request.args.get("name").replace("_", " ")
-        name = name.replace("^", "_")
+        name = name_process(request.args.get("name"))
         v = request.args.get("spd")
         cv = request.args.get("vist")
         loc = request.args.get("sname")
@@ -1067,26 +1153,43 @@ def trainop():
         else:
             trains[name][2] = int(v)
             trains[name][3] = int(cv)
-            trains[name][4] = loc
+            #trains[name][4] = loc
             trains[name][5] = int(dev)
         deact_cnt[name] = 0
         return "OK"
     return "Invalid operation", 500
 
+class HeapData():
+    def __init__(self, ident, disval):
+        self.ident = ident
+        self.disval = disval
+    def __lt__(self, other):
+        return self.disval < other.disval
+
 # Return potential track, O(n^2)
-def train_dijkstra_int(von, nach, pass_red=False, max_len=(10**14)):
+def train_dijkstra_int(von, nach, pass_red=False, max_len=(10**14), prohibits=[]):
     global signals, ZOOM
     #print("Execute dijkstra",von,nach)
     dis = {von:0}
     dvon = {von:""}
     vis = set()
-    for i in range(len(signals)):
+    rheap = []
+    heapq.heappush(rheap, HeapData(von, 0))
+    while len(rheap) > 0:
         cmin = max_len
         cmname = ""
+        '''
         for j in dis:
             if (signals[j][2] != PROHIBIT) and (pass_red or (signals[j][2] != RED)) and (j not in vis) and (dis[j] < cmin):
                 cmin = dis[j]
                 cmname = j
+        '''
+        ht = heapq.heappop(rheap)
+        cmin = ht.disval
+        cmname = ht.ident
+        if cmname in dis:
+            if cmin > dis[cmname]:
+                continue
         if cmname == "":
             break
         vis.add(cmname)
@@ -1096,12 +1199,18 @@ def train_dijkstra_int(von, nach, pass_red=False, max_len=(10**14)):
             cext = 0
             if cid != defaults[cmname]:
                 cext = length(cmname) * ZOOM
+            if not pass_red:
+                if signals[j][2] in DANGEROUS:
+                    continue
+            if j in prohibits:
+                continue
             if (j not in dis) or ((cmin + cext) < dis[j]):
                 dis[j] = cmin + cext
                 dvon[j] = cmname
+                heapq.heappush(rheap, HeapData(j, cmin + cext))
             cid += 1
     if nach not in dis:
-        print("TDJ: No route from",von,"to",nach)
+        print("TDJ Failure: No route from",von,"to",nach)
         return ([], max_len)
     track = [nach]
     cur = nach
@@ -1123,39 +1232,47 @@ def train_dijkstra(von, nach, pass_red=False, max_len=(10**14), optimizer=""):
                 break
         else:
             res = train_dijkstra_int(von, nach, pass_red, max_len)
-            train_routes[optimizer] = res
+            if len(res[0]) > 0:
+                train_routes[optimizer] = res
             return res
 
-TMAX = 40
+TMAX = 30
 tlastcall = {}
 
-def try_diverg(i, pres):
+# Returning 0 - No diverging is needed
+# Returning 1 - ready for diverging
+# Returning 2 - performing diverging
+def try_diverg(i, pres, forced=False):
     global zugin, trains, signals, originals
     flag = False
-    if zugin[pres] in trains:
-        if trains[zugin[pres]][2] > trains[i][2]:
-            #print("Attempting to configure diverging track")
-            flag = True
-            for j in signals[trains[i][4]][3]:
-                if ("_park" in j) and (zugin[j] not in trains):
-                    divergcall(trains[i][4], j)
-                    originals[j] = signals[j][2]
-                    signals[j][2] = "4"
-                    try:
-                        ziel = signals[j][3][signals[j][4]]
-                        originals[ziel] = signals[ziel][2]
-                        signals[ziel][2] = "-"
-                        red_timer[ziel][1] = 120
-                    except Exception as e:
-                        print("Error in diverging",str(e))
-                    print("Configured by using",j)
-                    break
-    return flag
+    cond = (zugin[pres] in trains) and (trains[zugin[pres]][2] > trains[i][2])
+    #if cond:
+    #    print("Detected blocked in",i)
+    if forced or cond:
+        #print("Attempting to configure diverging track")
+        flag = cond
+        for j in signals[trains[i][4]][3]:
+            if ("_park" in j) and (zugin[j] not in trains):
+                divergcall(trains[i][4], j)
+                originals[j] = signals[j][2]
+                signals[j][2] = "4"
+                try:
+                    ziel = signals[j][3][signals[j][4]]
+                    originals[ziel] = signals[ziel][2]
+                    signals[ziel][2] = "-"
+                    red_timer[ziel][1] = 120
+                except Exception as e:
+                    print("Error in diverging",str(e))
+                print("Configured by using",j)
+                return 2
+                break
+    return 1 if flag else 0
 
 total_delay = 0
 termcnt = 0
 
 _errhd1 = None
+waiting_gen = []
 
 def generate_new_train(mode=None, von=None, nach=None, sid=None):
     global red_at_exit, trains, zeitplan, _errhd1
@@ -1169,6 +1286,8 @@ def generate_new_train(mode=None, von=None, nach=None, sid=None):
             von = ""
             while (von.strip() == "") or ((von in zugin) and (zugin[von].strip() != "")):
                 von = random.choice(red_at_exit)
+        elif (von in zugin) and (zugin[von].strip() != ""):
+            return False
         # Maybe use ent???
         if nach is None:
             nach = random.choice(red_at_exit)
@@ -1182,9 +1301,11 @@ def generate_new_train(mode=None, von=None, nach=None, sid=None):
         zugcall(von, "0", zname)
         rlen = train_dijkstra(von, nach, True, optimizer=zname)[1]
         zeitplan[zname] = datetime.datetime.now() + datetime.timedelta(hours=((rlen / 1000) / (0.75 * vsoll)))
+        return True
     except Exception as e:
         print("ERROR in creating trains!!!",str(e))
         _errhd1 = e
+        return False
 
 # Thanks to Deepseek, but there are too fewer trains.
 # CONSIDER ADDERING OPPOSITE
@@ -1273,23 +1394,26 @@ def fetch_train_name_info(tnstr):
     return (tnstr, -1)
 
 def tsimu():
-    global termcnt, trains, ZOOM, zeitplan, deact_cnt, warninfo, tlastcall, total_delay, _errhd1
+    global termcnt, trains, ZOOM, zeitplan, deact_cnt, warninfo, tlastcall, total_delay, _errhd1, originals, signals, with_train, waiting_gen, external_dcall, exitings
 
     idle = 0
     lastcall = time.time()
     while True:
         # Generation
-        print("Tick train simulator,",termcnt,"train(s) has ever arrived","| Last idle:",idle,"| Total delay:",int(total_delay))
-        print("Error handled",_errhd1)
+        #print("Tick train simulator,",termcnt,"train(s) has ever arrived","| Last idle:",idle,"| Total delay:",int(total_delay))
+        #print("Error handled",_errhd1)
         idle = 0
         ct = time.time()
         try:
             if (random.randint(1, 1000) <= TS_DENSITY) and (len(trains) < TMAX):
                 generate_new_train()
-            for i in SCHED_TRAINS:
+            ext_waiting_gen = []
+            for i in (list(SCHED_TRAINS) + waiting_gen):
                 als = fetch_train_name_info(i)
                 if time.strftime("%H:%M") == SCHED_TRAINS[i][2]:
-                    generate_new_train(als[0], SCHED_TRAINS[i][0], SCHED_TRAINS[i][1], als[1])
+                    if not generate_new_train(als[0], SCHED_TRAINS[i][0], SCHED_TRAINS[i][1], als[1]):
+                        ext_waiting_gen.append(i)
+            waiting_gen = ext_waiting_gen
         except Exception as e:
             print("Error in routine processor",str(e))
             _errhd1 = e
@@ -1299,6 +1423,8 @@ def tsimu():
         try:
             for i in trains:
                 try:
+                    if i not in external_dcall:
+                        external_dcall[i] = False
                     if i not in tlastcall:
                         tlastcall[i] = time.time()
                     vziel = 0
@@ -1325,6 +1451,8 @@ def tsimu():
                             if zdis > 50:
                                 if trains[i][3] < 30:
                                     trains[i][3] += random.randint(20, 30) / 10
+                                elif trains[i][3] > 80:
+                                    trains[i][3] -= random.randint(60, 70) * (time.time() - tlastcall[i]) / 10
                                 elif trains[i][3] > 40:
                                     trains[i][3] -= random.randint(30, 40) / 10
                             else:
@@ -1336,10 +1464,13 @@ def tsimu():
                         tlastcall[i] = time.time()
                         clen = length(trains[i][4]) * ZOOM
                         done = False
+                        exitings.add(i)
                         while trains[i][5] >= clen and (future in signals):
-                            zugcall(trains[i][4], "1", i)
-                            trains[i][5] -= clen
+                            old_pos = trains[i][4]
                             trains[i][4] = future
+                            zugcall(old_pos, "1", i)
+                            print(i,"< Quit",old_pos,"now signal",signals[old_pos][2],"heading",future,"with",signals[future][2])
+                            trains[i][5] -= clen
                             if trains[i][4] == trains[i][1]:
                                 tlastcall.pop(i)
                                 trains.pop(i)
@@ -1349,13 +1480,16 @@ def tsimu():
                                     if datetime.datetime.now() > zeitplan[i]:
                                         cdelay = (datetime.datetime.now() - zeitplan[i]).total_seconds() / 60
                                 total_delay += cdelay
-                                print("End of train career",i,"with",cdelay,"min delay")
+                                print(i,"< End of train career",i,"with",cdelay,"min delay")
                                 termcnt += 1
                                 break
                             # TODO: CALL OF ENTER HERE IS INCORRECT ?
                             zugcall(future, "0", i)
+                            exitings.add(i)
                             future = signals[future][3][signals[future][4]]
                             clen = length(trains[i][4]) * ZOOM
+                        if i in exitings:
+                            exitings.remove(i)
                         if done:
                             continue
                     else:
@@ -1366,28 +1500,29 @@ def tsimu():
                             if deact_cnt[i] > 60:
                                 if trains[i][4] in signals:
                                     zugcall(trains[i][4], "1", i)
-                                warninfo += "<p>[Info] Train {} lost contact at {}</p>".format(i, trains[i][4])
+                                warnprint("<p>" + time.ctime() + " [Info] Train {} lost contact at {}</p>".format(i, trains[i][4]))
                                 tlastcall.pop(i)
                                 trains.pop(i)
                                 continue
                     if trains[i][7] and (trains[i][1] in signals) and (trains[i][4] in signals):
-                        if (not trains[i][6]) and (signals[trains[i][4]][2] == "-"):
-                            signals[trains[i][4]][2] = "0"
-                        flag = False
-                        if i in avoid_state:
-                            flag = (avoid_state[i] > 0)
+                            #zugin[trains[i][4]] = i
+                        flag = 0
+                        if external_dcall[i]:
+                            avoid_state[i] = 240
+                        if (i in avoid_state):
+                            flag = 1 if (avoid_state[i] > 0) else 0
                         if trains[i][4] in prev:
                             pres = prev[trains[i][4]]
                             # TODO: Pres-pres also work
-                            flag = try_diverg(i, pres)
+                            flag = try_diverg(i, pres, flag > 0)
                             if pres in prev:
-                                flag = flag or try_diverg(i, prev[pres])
-                            if flag:
+                                flag = max(flag, try_diverg(i, prev[pres], flag > 0))
+                            if flag > 0:
                                 avoid_state[i] = 60
-                        if flag:
-                            print("Train",i,"is trying to avoid a train")
+                        if flag > 0:
+                            print("Train",i,"is trying to avoid a train | state: ",flag)
                         route = []
-                        if not flag:
+                        if flag < 2:
                             route = train_dijkstra(trains[i][4], trains[i][1], True, optimizer=i)[0]
                         #print("Attempt for diverg",i,"path",route[:3])
                         #print("Process auto diverging",i,"with","actual",signals[route[1]][3][signals[route[1]][4]],"ideal",route[2])
@@ -1395,18 +1530,40 @@ def tsimu():
                             if (signals[route[0]][3][signals[route[0]][4]] != route[1]):
                                 divergcall(route[0], route[1])
                             if (len(route) > 2) and (signals[route[1]][3][signals[route[1]][4]] != route[2]):
-                                originals[route[1]] = signals[route[1]][2]
+                                if not with_train[route[1]]:
+                                    originals[route[1]] = signals[route[1]][2]
                                 signals[route[1]][2] = "0"
+                                # Consider contact with another train. For the train itself, we should consider diverging, if possible
+
                                 # Report signal mod !!!
                                 #print(i,":Checking diverging condition: present next:",signals[route[1]][3][signals[route[1]][4]],"prev:",route[0],"hope:",route[2])
+                                external_dcall[i] = False
                                 if (signals[route[1]][3][signals[route[1]][4]] == route[0]) or (not ((route[1] in zugin) and (zugin[route[1]] != "") and (zugin[route[1]] != i))):
                                     try:
                                         #signals[route[1]][3][signals[route[1]][4]] = signals[route[1]][3].index(route[2])
                                         signals[route[1]][2] = originals[route[1]]
                                         divergcall(route[1], route[2])
+                                        print(i,"Attempting to configure diverging track at",route[1],"for",route[2],"train info in:",(zugin[route[1]] if (route[1] in zugin) else "///"))
                                         # Report signal mod !!!
                                     except Exception as e:
                                         print("Unable to configure diverging track", str(e))
+                                else:
+                                    ##...
+                                    owner = ""
+                                    owner_spd = 0
+                                    if (route[1] in zugin) and (zugin[route[1]] in trains):
+                                        owner = zugin[route[1]]
+                                        owner_spd = trains[owner][2]
+                                    else:
+                                        print(i, "Could not find the owner in conflict!")
+                                    print(i, "Trying to diverg due to occupied track (by",(zugin[route[1]] if (route[1] in zugin) else "///"),")")
+                                    # Comparison: G > D, T > K (but as for IC and RE...)
+                                    if (owner_spd > trains[i][2]) or (owner_spd == trains[i][2] and owner > i):
+                                        # I should go back ...
+                                        external_dcall[i] = True
+                                    else:
+                                        # The other should go back ...
+                                        external_dcall[owner] = True
                             elif (signals[route[1]][2] in [RED, REDYELLOW]) and ((route[1] not in zugin) or (zugin[route[1]] == "") or (zugin[route[1]] == i) or (zugin[route[1]] not in trains)):
                                 signals[route[1]][2] = "-"
                                 if signals[route[1]][2] == RED and zugin[route[1]] == i:
@@ -1448,7 +1605,8 @@ def special_events():
                         sgns.append(sdata[1])
                 if spt == "B":
                     for j in sgns:
-                        originals[j] = signals[j][2]
+                        if not with_train[j]:
+                            originals[j] = signals[j][2]
                         signals[j][2] = PROHIBIT
                     arb = sgns
                 elif spt == "M":
@@ -1487,6 +1645,24 @@ def special_events():
             print("sge error",str(e))
         time.sleep(1)
 
+# NOT TESTED!!!
+def schutzs():
+    global trains, exitings, originals
+    while True:
+        try:
+            for i in trains:
+                if i in exitings:
+                    print(i, "> Exiting, so skipped")
+                    continue
+                if (signals[trains[i][4]][2] not in STOPPING):
+                    print(i, "> Safety configuration for", trains[i][4])
+                    if not with_train[trains[i][4]]:
+                        originals[trains[i][4]] = signals[trains[i][4]][2]
+                    signals[trains[i][4]][2] = "0"
+                    with_train[trains[i][4]] = True
+            time.sleep(0.5)
+        except Exception as e:
+            print("Schutz: err:",str(e))
 
 if __name__ == '__main__':
     for i in RAW_SCHED_TRAINS:
@@ -1506,6 +1682,8 @@ if __name__ == '__main__':
     ts.start()
     tp = threading.Thread(target=special_events)
     tp.start()
+    th = threading.Thread(target=schutzs)
+    th.start()
     print("Graphics start")
     for i in signals:
         scan_signal(i)
