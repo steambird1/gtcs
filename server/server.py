@@ -14,7 +14,10 @@ import signal as sigs
 import heapq
 
 logf = open("main.log", "a")
-DEBUGOUT = True
+DEBUGOUT = False
+
+if not DEBUGOUT:
+    sys.stderr = open("err.log", "a")
 
 def print(*kxargs,end='\n',sep=' '):
     kargs = [str(i) for i in kxargs]
@@ -89,6 +92,10 @@ avoid_state = {}
 
 train_routes = {}
 
+# When a train is between two trains, its priority is lowered
+low_priority = {}
+pass_name = {}
+
 def getmd5(s):
     return hashlib.md5(s.encode('utf-8')).hexdigest()
 
@@ -132,8 +139,8 @@ def draw_line(name,fromx,fromy,tox,toy,margin):
             signals[name+str(sids[name])][3].insert(0,name+str(sids[name]+1))
         sids[name] += 1
         clst = []
-        if name+str(sids[name]-1) in signals:
-            clst = [name+str(sids[name]-1)]
+        #if name+str(sids[name]-1) in signals:
+        #    clst = [name+str(sids[name]-1)]
         signals[name+str(sids[name])] = [[x,y],[x+mx,y+my],GREEN,clst,0]
         if x < tox:
             x += mx
@@ -144,6 +151,17 @@ def draw_line(name,fromx,fromy,tox,toy,margin):
         elif y > toy:
             y -= my
         print(x,y)
+
+def arrange_opposite(through,opposite):
+    global signals
+    oid = sids[opposite] + 1
+    for i in range(1, sids[through]+1):
+        tname = through + str(i)
+        oid -= 1
+        oname = opposite + str(oid)
+        if (tname in signals) and (oname in signals):
+            signals[tname][3].append(oname)
+            signals[oname][3].append(tname)
 
 def getlatest(name):
     global sids
@@ -170,7 +188,7 @@ def addstation(name,station,sxd,syd,mxd,myd,dn="",tr="",pcnt=3):
         cpk = name + "_" + station + "_park" + str(i)
         signals[ent][3].append(cpk)
         signals[cpk] = [[cstat[0][0]+mxd+i,cstat[0][1]+myd+i],[cstat[0][0]+sxd+mxd+i,cstat[0][1]+syd+myd+i],RED,[ent,ext],1]
-        #signals[ext][3].append(cpk)
+        signals[ext][3].append(cpk)
 """
 draw_line("C",-80,120,-30,60,10)
 draw_line("C",-30,60,-30,-60,10)
@@ -244,6 +262,8 @@ for i in _dpk:
 signals["M_up2"][3].append("M_upt_lyg")
 signals["M_dn79"][3].append("M_dnt_lyg")
 
+arrange_opposite("M_up", "M_dn")
+
 # Snow mountain line
 draw_line("MS_up", 130,225,130,220,-5)
 addstation("MS_up", "Mondstadt",0,-2,0,-3, "MS_dn", "Mondstadt (Suburb)")
@@ -274,6 +294,8 @@ signals["MS_up_Mondstadt_ent"][3].append("M_up_Mondstadt_ext")
 signals["MS_dn_Mondstadt_ext"][3].append("M_dn_Mondstadt_ent")
 signals["M_dn_Mondstadt_ent"][3].append("MS_dn_Mondstadt_ext")
 
+arrange_opposite("MS_up", "MS_dn")
+
 draw_line("V_up",130,160,200,160,5)
 addstation("V_up", "Sternfall", 2, 0, 3, 0, "V_dn", "Sternfall")
 draw_line("V_up",205,160,245,200,5)
@@ -292,6 +314,8 @@ signals["M_up_Quessw_ext"][3].append("V_up1")
 signals[getlatest("V_dn")][3].append("M_dn_Quessw_ent")
 signals[getlatest("V_dn")][4] = 1
 
+arrange_opposite("V_up", "V_dn")
+
 draw_line("S_up",-5,-205,-50,-250,-5)
 addstation("S_up", "Chasm", -2, -2, -3, -3, "S_dn", "Chasm")
 draw_line("S_up",-55,-260,-155,-260,-5)
@@ -304,6 +328,8 @@ draw_line("S_dn",-50,-250,-5,-205,5)
 
 signals[getlatest("S_dn")][3].append("M_lyg_gleis3_ent")
 signals[getlatest("S_dn")][4] = 1
+
+arrange_opposite("S_up", "S_dn")
 
 # New Inazuma Map (Bridge has approx. 90 km/h speed limit)
 
@@ -323,6 +349,8 @@ draw_line("I_dn",300,-200,5,-200,5)
 
 signals["I_up1"][3].append("M_dn_lyg_ext")
 signals[getlatest("I_dn")][3].append("M_lyg_gleis4_ent")
+
+arrange_opposite("I_up", "I_dn")
 
 def generate_for(name,c1=2,c2=8,mnspd=10,mxspd=20):
     global sids, addinfos, ZOOM
@@ -367,6 +395,8 @@ signals["M_lyg_gleis3_ext"][3].append("F_up1")
 signals[getlatest("F_dn")][3].append("M_lyg_gleis3_ent")
 signals[getlatest("F_dn")][4] = 1
 
+arrange_opposite("F_up", "F_dn")
+
 # Fountaine
 signals["F_up_Fountaine_ext"][3].append("FC_up_Fountaine_ent")
 draw_line("FC_up",-805,605,-810,605,5)
@@ -387,9 +417,10 @@ for proc in ["FC_up", "FC_dn"]:
         for j in range(1000, int(length(i)*ZOOM), 1000):
             addinfos[i].append([j, "S {}_{}m .".format(i, str(j))])
 
-for i in range(10,150,10):
-    signals["F_up"+str(i)][3].append("F_dn"+str(sids["F_dn"]-i))
-    signals["F_dn"+str(i)][3].append("F_up"+str(sids["F_up"]-i))
+arrange_opposite("FC_up", "FC_dn")
+#for i in range(10,150,10):
+#    signals["F_up"+str(i)][3].append("F_dn"+str(sids["F_dn"]-i))
+#    signals["F_dn"+str(i)][3].append("F_up"+str(sids["F_up"]-i))
 
 
 # Current for debug:
@@ -1189,24 +1220,6 @@ class HeapData():
     def __lt__(self, other):
         return self.disval < other.disval
 
-# Prevent backtraces as much as possible
-def penalty_weight(sfrom, sto):
-    uinos = ("up" in sfrom) and ("up" in sto)
-    dinos = ("dn" in sfrom) and ("dn" in sto)
-    if uinos or dinos:
-        usest = "up" if uinos else "dn"
-        sfromv = sfrom[sfrom.find(usest)+1:]
-        stov = sto[sto.find(usest)+1:]
-        if sfromv.isdigit() and stov.isdigit():
-            if int(sfromv) > int(stov):
-                return 45000
-            else:
-                return 0
-        else:
-            return 0
-    else:
-        return 0
-
 # Return potential track, O(n^2)
 def train_dijkstra_int(von, nach, pass_red=False, max_len=(10**14), prohibits=[]):
     global signals, ZOOM
@@ -1234,11 +1247,12 @@ def train_dijkstra_int(von, nach, pass_red=False, max_len=(10**14), prohibits=[]
         if cmname == "":
             break
         vis.add(cmname)
+        cmin = cmin + length(cmname) * ZOOM
         cid = 0
         for j in signals[cmname][3]:
-            cext = (length(cmname) * ZOOM) + penalty_weight(cmname, j)
+            cext = 0
             if cid != defaults[cmname]:
-                cext *= 2
+                cext = length(cmname) * ZOOM
             if not pass_red:
                 if signals[j][2] in DANGEROUS:
                     continue
@@ -1265,7 +1279,7 @@ def train_dijkstra_int(von, nach, pass_red=False, max_len=(10**14), prohibits=[]
 def train_dijkstra(von, nach, pass_red=False, max_len=(10**14), optimizer=""):
     return train_dijkstra_int(von, nach, pass_red, max_len)
 
-TMAX = 30
+TMAX = 5
 tlastcall = {}
 
 # Returning 0 - No diverging is needed
@@ -1438,8 +1452,22 @@ def blocked_by_others(sgns, me):
     cond = zugin[sgns] != "" and zugin[sgns] != me
     return cond and (zugin[sgns] in trains) and (trains[zugin[sgns]][4] == sgns)
 
+def has_priority(i, owner):
+    global zugin, trains, low_priority, pass_name
+    owner_spd = trains[owner][2]
+    if low_priority[owner] >= 2:
+        if owner in pass_name:
+            owner = pass_name[owner]
+            owner_spd = trains[owner][2]
+        else:
+            owner_spd = -1
+    if (low_priority[i] >= 2) or (owner_spd > trains[i][2]) or (owner_spd == trains[i][2] and owner > i):
+        return False
+    else:
+        return True
+
 def tsimu():
-    global termcnt, trains, ZOOM, zeitplan, deact_cnt, warninfo, tlastcall, total_delay, _errhd1, originals, signals, with_train, waiting_gen, external_dcall, exitings, master_controls, halt_controls, exited_trains
+    global termcnt, trains, ZOOM, zeitplan, deact_cnt, warninfo, tlastcall, total_delay, _errhd1, originals, signals, with_train, waiting_gen, external_dcall, exitings, master_controls, halt_controls, exited_trains, low_priority, pass_name
 
     idle = 0
     lastcall = time.time()
@@ -1466,6 +1494,29 @@ def tsimu():
         # Normal operation for all trains
         plastcall = time.time()
         try:
+            # Generate low-priority conditions:
+            # Reduce memory use:
+            low_priority = {}
+            pass_name = {}
+            for i in trains:
+                low_priority[i] = 0
+                pass_name[i] = ""
+            # Currently unused !!
+            '''
+            for i in trains:
+                zus = zugin[nextof(trains[i][4])]
+                if zus in trains:
+                    low_priority[zugin[nextof(trains[i][4])]] += 1
+                    low_priority[i] += 1
+            for i in trains:
+                zus = zugin[nextof(trains[i][4])]
+                if low_priority[i] < 2:
+                    if zus in trains:
+                        pass_name[zus] = i
+                else:
+                    if (i in pass_name) and (zus in trains):
+                        pass_name[zus] = pass_name[i]
+            '''
             for i in trains:
                 try:
                     if i not in external_dcall:
@@ -1510,11 +1561,11 @@ def tsimu():
                                     trains[i][3] -= random.randint(60, 70) * (time.time() - tlastcall[i]) / 10
                                 elif trains[i][3] > 40:
                                     trains[i][3] -= random.randint(30, 40) / 10
-                                print(i,"Gliding")
+                                #print(i,"Gliding")
                                 norm_flag = False
                             elif vziel <= 20 and zdis < 150:
                                 trains[i][3] -= random.randint(90, 100) / 10
-                                print(i,"Halt")
+                                #print(i,"Halt")
                                 norm_flag = False
                         if norm_flag:
                             if zaccel < -0.5:
@@ -1585,7 +1636,7 @@ def tsimu():
                             flag = try_diverg(i, pres, flag > 0)
                             if pres in prev:
                                 flag = max(flag, try_diverg(i, prev[pres], flag > 0))
-                            if flag > 0:
+                            if flag >= 2:
                                 avoid_state[i] = 60
                         #if flag > 0:
                         #    print("Train",i,"is trying to avoid a train | state: ",flag)
@@ -1622,23 +1673,25 @@ def tsimu():
                                         owner_spd = 0
                                         if (route[1] in zugin) and (zugin[route[1]] in trains) and (trains[zugin[route[1]]][4] == route[1]):
                                             owner = zugin[route[1]]
-                                            owner_spd = trains[owner][2]
                                             print(i, "Trying to diverg due to occupied track (by",
                                                   (zugin[route[1]] if (route[1] in zugin) else "///"), ")")
                                             # Comparison: G > D, T > K (but as for IC and RE...)
                                             # But what if stuck for sufficiently long time?
-                                            if (owner_spd > trains[i][2]) or (owner_spd == trains[i][2] and owner > i):
+                                            if not has_priority(i, owner):
                                                 # I should go back ... (only 2 cycles)
                                                 external_dcall[i] = 2
-                                                ed_setter[i] = i + " from " + owner
+                                                if low_priority[i] >= 2:
+                                                    ed_setter[i] = i + " (low priority)"
+                                                else:
+                                                    ed_setter[i] = i + " from " + owner
                                             else:
                                                 # The other should go back ... (120 cycles to prevent self-unlocking)
                                                 external_dcall[owner] = 120
                                                 ed_setter[owner] = i + " to " + owner
                                                 print(i,"Intervention!")
                                                 # You can't do this now !!!
-                                                take_action = True
-                                                take_special_action = True
+                                                #take_action = True
+                                                #take_special_action = True
                                         else:
                                             print(i, "Could not find the owner in conflict!")
                                             take_action = True
@@ -1760,22 +1813,22 @@ def special_events():
 
 # NOT TESTED!!!
 def schutzs():
-    global trains, exitings, originals
+    global trains, exitings, originals, low_priority
     while True:
         try:
             for i in trains:
                 if i in exitings:
-                    print(i, "> Exiting, so skipped")
+                    #print(i, "> Exiting, so skipped")
                     continue
                 if (signals[trains[i][4]][2] not in STOPPING):
-                    print(i, "> Safety configuration for", trains[i][4])
+                    #print(i, "> Safety configuration for", trains[i][4])
                     if not with_train[trains[i][4]]:
                         originals[trains[i][4]] = signals[trains[i][4]][2]
                     signals[trains[i][4]][2] = "0"
                     with_train[trains[i][4]] = True
                     if zugin[trains[i][4]] != i:
                         zugin[trains[i][4]] = i
-            time.sleep(0.1)
+            time.sleep(0.5)
         except Exception as e:
             print("Schutz: err:",str(e))
 
@@ -1803,5 +1856,5 @@ if __name__ == '__main__':
     for i in signals:
         scan_signal(i)
         break
-    turtle.ontimer(imgupd, 1000)
+    #turtle.ontimer(imgupd, 1000)
     turtle.mainloop()
