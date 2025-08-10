@@ -89,6 +89,7 @@ trains = {}
 zeitplan = {}
 deact_cnt = {}
 avoid_state = {}
+halt_clock = {}
 
 train_routes = {}
 
@@ -961,8 +962,8 @@ def msg():
             if (i in external_dcall) and external_dcall[i] > 0:
                 dinfo += '<p style="color: blue;">[Diverg Note] Train {} has to divert to avoid another train ({}, by {})</p>'.format(i, external_dcall[i], (ed_setter[i] if (i in ed_setter) else "???"))
             elif (i in avoid_state) and avoid_state[i] > 0:
-                dinfo += '<p style="color: green;">[Diverg Note] Train {} has to park to avoid another train ({})</p>'.format(
-                    i, avoid_state[i])
+                dinfo += '<p style="color: green;">[Diverg Note] Train {} has to park to avoid another train ({}, by {})</p>'.format(
+                    i, avoid_state[i], (ed_setter[i] if (i in ed_setter) else "???"))
 
         for i in zug_warnings:
             if i not in trains:
@@ -1266,7 +1267,7 @@ def train_dijkstra_int(von, nach, pass_red=False, max_len=(10**14), prohibits=[]
                 heapq.heappush(rheap, HeapData(j, cmin + cext))
             cid += 1
     if nach not in dis:
-        print("TDJ Failure: No route from",von,"to",nach)
+        #print("TDJ Failure: No route from",von,"to",nach)
         return ([], max_len)
     track = [nach]
     cur = nach
@@ -1279,23 +1280,46 @@ def train_dijkstra_int(von, nach, pass_red=False, max_len=(10**14), prohibits=[]
 def train_dijkstra(von, nach, pass_red=False, max_len=(10**14), optimizer=""):
     return train_dijkstra_int(von, nach, pass_red, max_len)
 
-TMAX = 5
+TMAX = 10
 tlastcall = {}
+
+def has_priority(i, owner):
+    global zugin, trains, low_priority, pass_name
+    owner_spd = trains[owner][2]
+    if i == owner:
+        return True
+    if low_priority[owner] >= 2:
+        if owner in pass_name:
+            owner = pass_name[owner]
+            owner_spd = trains[owner][2]
+        else:
+            owner_spd = -1
+    if (low_priority[i] >= 2) or (owner_spd > trains[i][2]) or (owner_spd == trains[i][2] and owner > i):
+        return False
+    else:
+        return True
 
 # Returning 0 - No diverging is needed
 # Returning 1 - ready for diverging
 # Returning 2 - performing diverging
 def try_diverg(i, pres, forced=False):
-    global zugin, trains, signals, originals
+    global zugin, trains, signals, originals, ed_setter, external_dcall
     flag = False
-    cond = (zugin[pres] in trains) and (trains[zugin[pres]][2] > trains[i][2])
+    cond = (zugin[pres] in trains) and (not has_priority(i, zugin[pres]))
     #if cond:
     #    print("Detected blocked in",i)
     if "_park" in trains[i][4]:
         return 0
+    auxinfo = ""
+    if external_dcall[i] <= 0:
+        if cond:
+            ed_setter[i] = auxinfo + "; from " + zugin[pres]
+        else:
+            ed_setter[i] = auxinfo + "; holding"
     if forced or cond:
         #print("Attempting to configure diverging track")
-        flag = cond
+        if not cond:
+            return 1
         for j in signals[trains[i][4]][3]:
             if ("_park" in j) and (zugin[j] not in trains):
                 divergcall(trains[i][4], j)
@@ -1308,7 +1332,7 @@ def try_diverg(i, pres, forced=False):
                     red_timer[ziel][1] = 240
                 except Exception as e:
                     print("Error in diverging",str(e))
-                print("Configured by using",j)
+                #print("Configured by using",j)
                 return 2
                 break
     return 1 if flag else 0
@@ -1452,22 +1476,8 @@ def blocked_by_others(sgns, me):
     cond = zugin[sgns] != "" and zugin[sgns] != me
     return cond and (zugin[sgns] in trains) and (trains[zugin[sgns]][4] == sgns)
 
-def has_priority(i, owner):
-    global zugin, trains, low_priority, pass_name
-    owner_spd = trains[owner][2]
-    if low_priority[owner] >= 2:
-        if owner in pass_name:
-            owner = pass_name[owner]
-            owner_spd = trains[owner][2]
-        else:
-            owner_spd = -1
-    if (low_priority[i] >= 2) or (owner_spd > trains[i][2]) or (owner_spd == trains[i][2] and owner > i):
-        return False
-    else:
-        return True
-
 def tsimu():
-    global termcnt, trains, ZOOM, zeitplan, deact_cnt, warninfo, tlastcall, total_delay, _errhd1, originals, signals, with_train, waiting_gen, external_dcall, exitings, master_controls, halt_controls, exited_trains, low_priority, pass_name
+    global termcnt, trains, ZOOM, zeitplan, deact_cnt, warninfo, tlastcall, total_delay, _errhd1, originals, signals, with_train, waiting_gen, external_dcall, exitings, master_controls, halt_controls, exited_trains, low_priority, pass_name, halt_clock
 
     idle = 0
     lastcall = time.time()
@@ -1494,6 +1504,10 @@ def tsimu():
         # Normal operation for all trains
         plastcall = time.time()
         try:
+            for i in halt_clock:
+                if i not in trains:
+                    halt_clock.pop(i)
+                    break
             # Generate low-priority conditions:
             # Reduce memory use:
             low_priority = {}
@@ -1501,6 +1515,8 @@ def tsimu():
             for i in trains:
                 low_priority[i] = 0
                 pass_name[i] = ""
+                if i not in halt_clock:
+                    halt_clock[i] = 0
             # Currently unused !!
             '''
             for i in trains:
@@ -1624,10 +1640,17 @@ def tsimu():
                                 trains.pop(i)
                                 continue
                     if trains[i][7] and (trains[i][1] in signals) and (trains[i][4] in signals):
-                            #zugin[trains[i][4]] = i
+                        if trains[i][3] <= 0.5:
+                            halt_clock[i] += 1
+                        else:
+                            halt_clock[i] = 0
+                        if "park" in trains[i][4]:
+                            halt_clock[i] = 0
+                        if halt_clock[i] > 320 and ("park" not in trains[i][4]):
+                            avoid_state[i] = 35
                         flag = 0
                         if external_dcall[i] > 0:
-                            avoid_state[i] = 25
+                            avoid_state[i] = 15
                         if (i in avoid_state):
                             flag = 1 if (avoid_state[i] > 0) else 0
                         if trains[i][4] in prev:
@@ -1649,7 +1672,7 @@ def tsimu():
                             if (len(route) > 1) and (not flag):
                                 if (external_dcall[i] <= 0) and (nextof(route[0]) != route[1]):
                                     divergcall(route[0], route[1])
-                                    print(i,"Attempt to configure diverging track at current block",route[1])
+                                    #print(i,"Attempt to configure diverging track at current block",route[1])
                                 if ((len(route) > 2) and (nextof(route[1]) != route[2])) or blocked_by_others(route[1], i):
                                     if (external_dcall[i] <= 0) and (not blocked_by_others(route[1], i)):
                                         if not with_train[route[1]]:
@@ -1673,8 +1696,8 @@ def tsimu():
                                         owner_spd = 0
                                         if (route[1] in zugin) and (zugin[route[1]] in trains) and (trains[zugin[route[1]]][4] == route[1]):
                                             owner = zugin[route[1]]
-                                            print(i, "Trying to diverg due to occupied track (by",
-                                                  (zugin[route[1]] if (route[1] in zugin) else "///"), ")")
+                                            #print(i, "Trying to diverg due to occupied track (by",
+                                            #      (zugin[route[1]] if (route[1] in zugin) else "///"), ")")
                                             # Comparison: G > D, T > K (but as for IC and RE...)
                                             # But what if stuck for sufficiently long time?
                                             if not has_priority(i, owner):
@@ -1688,7 +1711,7 @@ def tsimu():
                                                 # The other should go back ... (120 cycles to prevent self-unlocking)
                                                 external_dcall[owner] = 120
                                                 ed_setter[owner] = i + " to " + owner
-                                                print(i,"Intervention!")
+                                                #print(i,"Intervention!")
                                                 # You can't do this now !!!
                                                 #take_action = True
                                                 #take_special_action = True
@@ -1703,9 +1726,9 @@ def tsimu():
                                                 if len(route) > 2:
                                                     signals[route[1]][2] = originals[route[1]]
                                                     divergcall(route[1], route[2])
-                                                    print(i, "Attempting to configure diverging track at", route[1], "for",
-                                                          route[2], "train info in:",
-                                                          (zugin[route[1]] if (route[1] in zugin) else "///"))
+                                                    #print(i, "Attempting to configure diverging track at", route[1], "for",
+                                                    #      route[2], "train info in:",
+                                                    #      (zugin[route[1]] if (route[1] in zugin) else "///"))
                                                     # Report signal mod !!!
                                                 elif take_special_action:
                                                     for j in range(len(signals[route[1]][3])):
@@ -1739,6 +1762,7 @@ def tsimu():
             exited_trains.clear()
         except Exception as e:
             print("Error",str(e))
+            time.sleep(0.2)
         lastcall = plastcall
         while time.time() < (ct+1):
             idle += 1
@@ -1805,7 +1829,7 @@ def special_events():
                                 print("Unable to recover change in",j)
                     active_issues.pop(i)
                     print("Removing issue",i)
-                    continue
+                    break
                 active_issues[i][1] -= 1
         except Exception as e:
             print("sge error",str(e))
@@ -1831,6 +1855,7 @@ def schutzs():
             time.sleep(0.5)
         except Exception as e:
             print("Schutz: err:",str(e))
+            time.sleep(0.5)
 
 if __name__ == '__main__':
     for i in RAW_SCHED_TRAINS:
