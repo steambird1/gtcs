@@ -127,6 +127,7 @@ def draw_line(name,fromx,fromy,tox,toy,margin):
         sids[name] = 0
     mx = abs(margin)# if (fromx < tox) else (-margin)
     my = abs(margin)# if (fromy < toy) else (-margin)
+    
     #for x in range(fromx,tox,mx):
     #    for y in range(fromy,toy,my):
     x = fromx
@@ -135,6 +136,10 @@ def draw_line(name,fromx,fromy,tox,toy,margin):
         raise ValueError("May cause dead loop")
     #if (abs(toy-tox)//margin) != (abs(fromy-fromx)//margin):
     #    raise ValueError("Bad steps")
+    if fromx == tox:
+        mx = 0
+    if fromy == toy:
+        my = 0
     while x != tox or y != toy:
         if name+str(sids[name]) in signals:
             signals[name+str(sids[name])][3].insert(0,name+str(sids[name]+1))
