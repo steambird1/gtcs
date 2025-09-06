@@ -34,6 +34,7 @@ SCHUTZ_SIMU = True
 SCHUTZ_PROB = 1
 DARK = True
 DRANGE = 4000
+PASSING_SPD = 40
 
 MYGREEN = ("green2" if DARK else "green")
 MYWHITE = ("white" if DARK else "black")
@@ -56,6 +57,7 @@ prereded = False
 schutz = False
 schutz_info = ""
 has_afb = False
+passing = False
 
 asuber=0
 
@@ -188,7 +190,7 @@ def maxthr_val():
     if cpsrc == "a":
         res = apress * 1.5
     else:
-        res = ((cevolts + batvolts) * max(ceamps, batamps)) / 750
+        res = ((cevolts + batvolts) * (ceamps + batamps)) / 750
     return res * (ok_motor) / 2
 
 def motor_out():
@@ -1033,6 +1035,8 @@ def render_gtcs_main():
             gtcsinfo.append(["On Battery", "orange"])
         if batregen:
             gtcsinfo.append(["Battery Regeneration", MYBLUE])
+        if passing:
+            gtcsinfo.append(["Passing Mode", "orange"])
         for i in failures:
             if failures[i][1] or (failures[i][2]()):
                 gtcsinfo.append([failures[i][0], "maroon1"])
@@ -1057,7 +1061,8 @@ def render_gtcs_main():
     if curlkj == "0" or curlkj == "00":
         if curlkj == "00" or prereded:
             lkj_draw("red")
-            start_sound("red")
+            if not passing:
+                start_sound("red")
         else:
             lkj_draw("red", "yellow")
     elif curlkj == "1":
@@ -1187,7 +1192,7 @@ def submit_loc(czugat=None):
 lastupdate_t = time.time()
 
 def physics():
-    global lastupdate_t, lastspdlim, tcnter1, plog, contnz, caccel, limitz, accuer, curspeed, thrust, gtcsinfo, accreq, power, acreqspd, LEVEL, schutz, schutz_info, sysinfo, zusatz_lastspdlim
+    global lastupdate_t, lastspdlim, tcnter1, plog, contnz, caccel, limitz, accuer, curspeed, thrust, gtcsinfo, accreq, power, acreqspd, LEVEL, schutz, schutz_info, sysinfo, zusatz_lastspdlim, passing, PASSING_SPD
     if power < 0 or curspeed < 20:
         thrust = power / 2
     else:
@@ -1434,6 +1439,16 @@ def paxcaller():
         start_sound(passenger_call)
         passenger_call = ""
 
+def passing_switch():
+    global on_keyboard, passing
+    if on_keyboard:
+        keyboard_add('z')
+        return
+    if not passing:
+        passing = True
+    else:
+        passing = False
+
 t.screen.onkey(kup, 'Up')
 t.screen.onkey(kdn, 'Down')
 t.screen.onkey(ksupp, '9')
@@ -1445,6 +1460,7 @@ t.screen.onkey(schutz_cancel, '5')
 t.screen.onkey(change_loc, '4')
 t.screen.onkey(change_spd, '3')
 t.screen.onkey(paxcaller, 'h')
+t.screen.onkey(passing_switch, 'z')
 
 
 def wind_charge():
@@ -1564,7 +1580,7 @@ def syspage_switch(ckey):
 for i in syspages:
     t.screen.onkey(eval("lambda: syspage_switch('{}')".format(i)), i)
 
-for i in '12tyuidfjzxcvbQWERTYUIOPASDFGHJKLZXCVBNM':
+for i in '12tyuidfjxcvbQWERTYUIOPASDFGHJKLZXCVBNM':
     t.screen.onkey(eval("lambda: keyboard_add('{}')".format(i)), i)
 
 t.screen.onkey(lambda: keyboard_add('_'), ',')
@@ -1612,7 +1628,7 @@ geschw = 120
 
 
 def update_loc(target):
-    global geschw, curlkj, prereded, accuer, lastspdlim, g3err, LEVEL, zugat, spdlim, accreq, ZUGNAME, autog3, ospeed, AUTH
+    global geschw, curlkj, prereded, accuer, lastspdlim, g3err, LEVEL, zugat, spdlim, accreq, ZUGNAME, autog3, ospeed, AUTH, passing, PASSING_SPD
     try:
         submit_loc(target)
         if zugat != "":
@@ -1631,6 +1647,8 @@ def update_loc(target):
             signal = sus[0]
         g3err.append(time.ctime() + " GTCS-1: Receiving signal " + str(signal))
         cspdlim = translate(signal)
+        if passing:
+            cspdlim = PASSING_SPD
         if cspdlim == 0:
             prereded = True
         else:
@@ -1911,6 +1929,8 @@ def gtcs3():
                     update_loc(sr[2])
                 else:
                     spdlim = translate(sr[1])
+                    if passing:
+                        spdlim = PASSING_SPD
                     if sr[1] != former_signal or sr[2] != former_sid:
                         dif_warning = 5
                     former_sid = sr[2]
@@ -1947,6 +1967,8 @@ def gtcs3():
                     # if sd > 3500:
                     #    raw = 0
                     clastspdlim = min(lastspdlim, zusatz_lastspdlim)
+                    if passing:
+                        spdlim = PASSING_SPD
                     if (curspeed > clastspdlim):
                         if (curspeed - clastspdlim > 80):
                             raw = min(raw, -12)
@@ -2048,7 +2070,7 @@ def gsmgmt():
     s = open("blackbox_high_speed.csv","a")
     ticker = 0
     while True:
-        if random.randint(0, 35000) < SCHUTZ_PROB:
+        if random.randint(0, 350000) < SCHUTZ_PROB:
             rf = random.choice(list(failures))
             failures[rf][1] = not failures[rf][1]
             if failures[rf][1] and (("fire" in rf) or ("smoke" in rf)):
@@ -2114,6 +2136,10 @@ def gsmgmt():
                 ceamps = 80
         if cevolts + 10 > batvolts:
             onbat = False
+        elif cevolts + 20 < batvolts:
+            onbat = True
+            evolts = batvolts
+            eamps = batamps
         if (not onbat):
             evolts = cevolts
             eamps = ceamps
@@ -2142,13 +2168,13 @@ def gsmgmt():
         #print("pre;;chv=",chvolts,"ce:",cevolts,ceamps,"ev=",evolts,"ea=",eamps,onbat,batregen)
         if cpsrc == "a":
             chvolts = 20
-        if (cevolts < chvolts + 10):
+        if (cevolts < chvolts + 10) and (batvolts > 0):
             # Not so physics, I think
             #chvolts = (power * curspeed / 3.6 * 25) / batamps
             rate = (chvolts - cevolts) / batvolts
             evolts = chvolts
+            eamps = ceamps + batamps * rate
             #print("Battery rate",rate)
-            eamps = batamps
             onbat = True
             battery_charge -= batamps * rate / 3600
         elif cevolts - chvolts > 20:
