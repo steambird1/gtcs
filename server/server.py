@@ -62,9 +62,18 @@ def name_process(x):
 signals = {}
 addinfos = {}
 
+low_levels = {}
+
 def nextof(signal_name):
     global signals
     return signals[signal_name][3][signals[signal_name][4]]
+
+def max_gtcs_level(signal_name):
+    global low_levels
+    if signal_name not in low_levels:
+        return 3
+    else:
+        return low_levels[signal_name]
 
 translation = {}
 
@@ -181,19 +190,19 @@ def addstation(name,station,sxd,syd,mxd,myd,dn="",tr="",pcnt=3):
     red_at_exit.append(ext)
     signals[getlatest(name)][3].insert(0,ent)
     signals[ent] = [cstat[0],[cstat[0][0]+sxd,cstat[0][1]+syd],GREEN,[ext],0]
-    signals[ent][3].append(getlatest(name))
+    #signals[ent][3].append(getlatest(name))
     sids[name] += 1
     if dn != "":
         signals[ent][3].append(dn + "_" + station + "_ext")
-    signals[ext] = [[cstat[0][0]+mxd,cstat[0][1]+myd],[cstat[0][0]+sxd+mxd,cstat[0][1]+syd+myd],RED,[ent,name+str(sids[name])],1]
-    signals[name+str(sids[name])] = [[cstat[0][0]+sxd+mxd,cstat[0][1]+syd+myd],[cstat[0][0]+(sxd*2)+mxd,cstat[0][1]+(syd*2)+myd],"6",[ext],0]
+    signals[ext] = [[cstat[0][0]+mxd,cstat[0][1]+myd],[cstat[0][0]+sxd+mxd,cstat[0][1]+syd+myd],RED,[name+str(sids[name])],1]
+    signals[name+str(sids[name])] = [[cstat[0][0]+sxd+mxd,cstat[0][1]+syd+myd],[cstat[0][0]+(sxd*2)+mxd,cstat[0][1]+(syd*2)+myd],"6",[],0]
     if tr != "":
         translation[ext] = tr
         translation[dn + "_" + station + "_ext"] = tr
     for i in range(1,pcnt+1):
         cpk = name + "_" + station + "_park" + str(i)
         signals[ent][3].append(cpk)
-        signals[cpk] = [[cstat[0][0]+mxd+i,cstat[0][1]+myd+i],[cstat[0][0]+sxd+mxd+i,cstat[0][1]+syd+myd+i],RED,[ent,ext],1]
+        signals[cpk] = [[cstat[0][0]+mxd+i,cstat[0][1]+myd+i],[cstat[0][0]+sxd+mxd+i,cstat[0][1]+syd+myd+i],RED,[ext],0]
         signals[ext][3].append(cpk)
 """
 draw_line("C",-80,120,-30,60,10)
@@ -373,6 +382,13 @@ def generate_for(name,c1=2,c2=8,mnspd=10,mxspd=20):
                 cdis += randz(100, 200)
                 cdis = min(cdis, lz)
                 addinfos[sname].append([cdis, "P1"])
+            elif cst <= (c1+c2/2):
+                slope = randz(-10,10)
+                if slope != 0:
+                    addinfos[sname].append([cdis, "O " + str(slope)])
+                    cdis += randz(300, 1200)
+                    cdis = min(cdis, lz)
+                    addinfos[sname].append([cdis, "O 0"])
             elif cst <= c2:
                 addinfos[sname].append([cdis, "La " + str(randz(0,5)*10) + " " + str(randz(mnspd,mxspd)*10)])
                 cdis += randz(500, 1500)
@@ -428,8 +444,27 @@ arrange_opposite("FC_up", "FC_dn")
 #    signals["F_up"+str(i)][3].append("F_dn"+str(sids["F_dn"]-i))
 #    signals["F_dn"+str(i)][3].append("F_up"+str(sids["F_up"]-i))
 
+# Now adding Nord-Krai support: (Considering extending from S_up)
+draw_line("K_up",-160,-260,-400,-260,-10)
+draw_line("K_up",-400,-260,-400,260,10)
+addstation("K_up", "Nord-Krai", 0,2,0,3, "K_dn", "Nord Krai")
+draw_line("K_dn",-410,270,-410,265,5)
+addstation("K_dn", "Nord-Krai", 0,-2,0,-3, "K_up")
+draw_line("K_dn",-410,260,-410,-270,10)
+draw_line("K_dn",-410,-270,-160,-280,10)
 
-# Current for debug:
+generate_for("K_up",20,60,6,18)
+generate_for("K_dn",20,60,6,18)
+arrange_opposite("K_up", "K_dn")
+
+for i in range(1, sids["K_up"]):
+    low_levels["K_up" + str(i)] = 1
+    low_levels["K_dn" + str(i)] = 1
+
+signals[getlatest("K_dn")][3].append("S_dn_Sumeru_ent")
+signals[getlatest("K_dn")][4] = 1
+signals["S_up_Sumeru_ext"][3].append("K_up1")
+
 # La [lower] [upper] - speed limit start; Le - speed limit clear; T [text] - texture information; S [name] [stat] - signal
 # P0 - neutral area; P1 - repowering
 
@@ -829,7 +864,7 @@ def signalset():
 exitings = set()
 
 def zugcall(sname, state, zugid):
-    global signals, warninfo, red_at_exit, TRAIN_AUTH, WARNING, PREWARNING, trains, RED, GREEN, exitings
+    global signals, warninfo, red_at_exit, TRAIN_AUTH, WARNING, PREWARNING, trains, RED, GREEN, exitings, zugbefehl, zugrcv
     npz = name_process(zugid)
     if state == "0":
         if signals[sname][2] == RED:
@@ -858,6 +893,13 @@ def zugcall(sname, state, zugid):
                     signals[pps][2] = PREWARNING
         if npz in exitings:
             exitings.remove(npz)
+        try:
+            next_level = max_gtcs_level(nextof(sname))
+            if max_gtcs_level(sname) != next_level:
+                zugbefehl[zugid] = time.ctime() + ": Announcement Level " + str(next_level)
+                zugrcv[zugid] = 0
+        except Exception as e:
+            print("Failed to load GTCS DMI message for",sname,"in train",npz,str(e))
         #print(npz," * Called entrance at ",sname)
         return RED
     elif state == "1":
@@ -1090,7 +1132,7 @@ def imgupd():
     except Exception as e:
         curerr = str(e)
         print(curerr)
-    turtle.ontimer(imgupd, 1000)
+    turtle.ontimer(imgupd, 20000)
 
 def red_tackle():
     global signals, red_timer, manuals
@@ -1816,7 +1858,7 @@ def special_events():
             # Check ending of active issues:
             for i in active_issues:
                 if active_issues[i][1] <= 0:
-                    # Undo in accordance
+                  #  # Undo in accordance
                     if active_issues[i][0] == "B":
                         for j in active_issues[i][2]:
                             if j in originals:
@@ -1857,7 +1899,7 @@ def schutzs():
                     with_train[trains[i][4]] = True
                     if zugin[trains[i][4]] != i:
                         zugin[trains[i][4]] = i
-            time.sleep(0.5)
+            time.sleep(0.)
         except Exception as e:
             print("Schutz: err:",str(e))
             time.sleep(0.5)
@@ -1867,10 +1909,15 @@ if __name__ == '__main__':
         iname = fetch_train_name_info(i)
         SCHED_TRAINS[i] = RAW_SCHED_TRAINS[i]
         SCHED_TRAINS[iname[0] + str(iname[1] + 1)] = [RAW_SCHED_TRAINS[i][1], RAW_SCHED_TRAINS[i][0], RAW_SCHED_TRAINS[i][2]]
+    # Test component begin ...
+    #low_levels["M_up8"] = 1
+    # Test component end ...
     for i in signals:
         if i not in addinfos:
             #print("Addinfo assist",i)
             addinfos[i] = []
+        if max_gtcs_level(i) != 3:
+            update_addata(i, 0, "M " + str(max_gtcs_level(i)))
         with_train[i] = False
     t = threading.Thread(target=ar)
     t.start()
@@ -1886,5 +1933,5 @@ if __name__ == '__main__':
     for i in signals:
         scan_signal(i)
         break
-    #turtle.ontimer(imgupd, 1000)
+    turtle.ontimer(imgupd, 20000)
     turtle.mainloop()
