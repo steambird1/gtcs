@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fountaine MTR Dashboard</title>
+    <title>Fountaine MTR 控制面板</title>
     <style>
         :root {
             --primary: #2c3e50;
@@ -431,8 +431,8 @@
     <div class="container">
         <header>
             <div class="header-content">
-                <div class="header-title">Fountaine MTR Dashboard</div>
-                <div class="server-time">Server Time: <span id="srvt">Loading...</span></div>
+                <div class="header-title">Fountaine MTR 控制面板</div>
+                <div class="server-time">服务器时间: <span id="srvt">加载中...</span></div>
             </div>
         </header>
         
@@ -440,8 +440,8 @@
             <!-- 消息和系统状态 -->
             <div class="card full-width">
                 <div class="card-header">
-                    <span>System State and Messages</span>
-                    <button class="btn btn-danger" onclick="clean();">Clear</button>
+                    <span>系统状态和消息</span>
+                    <button class="btn btn-danger" onclick="clean();">清除消息</button>
                 </div>
                 <div class="card-body">
                     <div class="messages-container" id="msgs">
@@ -452,33 +452,33 @@
             
             <!-- 信号控制 -->
             <div class="card">
-                <div class="card-header">Signal Control</div>
+                <div class="card-header">信号控制</div>
                 <div class="card-body">
                     <div class="alert alert-info">
-                        <strong>Tip:</strong> Input signal name and target state (description or diverging target). Don't forget password.
+                        <strong>操作说明:</strong> 输入信号名称和目标状态，使用密码进行验证。
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label" for="spwd">Password</label>
-                        <input type="password" id="spwd" class="form-control" placeholder="Input your password here...">
+                        <label class="form-label" for="spwd">密码</label>
+                        <input type="password" id="spwd" class="form-control" placeholder="请输入密码">
                     </div>
                     
                     <div class="signal-controls">
                         <div class="form-group">
-                            <label class="form-label" for="sname">Signal Name</label>
-                            <input type="text" id="sname" class="form-control" placeholder="Signal Name">
+                            <label class="form-label" for="sname">信号名称</label>
+                            <input type="text" id="sname" class="form-control" placeholder="输入信号名称">
                         </div>
                         
                         <div class="form-group">
-                            <label class="form-label" for="stype">Target State</label>
-                            <input type="text" id="stype" class="form-control" placeholder="Target State (e.g. '5', '.', '0', 'M_up3')">
+                            <label class="form-label" for="stype">目标状态</label>
+                            <input type="text" id="stype" class="form-control" placeholder="输入目标状态">
                         </div>
                     </div>
                     
-                    <button class="btn btn-success" onclick="go();">Apply</button>
+                    <button class="btn btn-success" onclick="go();">应用设置</button>
                     
                     <div class="form-group" style="margin-top: 15px;">
-                        <label class="form-label">Result</label>
+                        <label class="form-label">操作结果</label>
                         <div class="result-box" id="result"></div>
                     </div>
                 </div>
@@ -487,22 +487,22 @@
             <!-- 线路图 -->
             <div class="card">
                 <div class="card-header">
-                    <span>Line Map</span>
+                    <span>线路图</span>
                     <div class="signal-status">
                         <div class="status-indicator status-green"></div>
-                        <span>Clear</span>
+                        <span>通行</span>
                         <div class="status-indicator status-yellow" style="margin-left: 15px;"></div>
-                        <span>Restricted</span>
+                        <span>限制</span>
                         <div class="status-indicator status-red" style="margin-left: 15px;"></div>
-                        <span>Occupied/Danger</span>
+                        <span>占用/禁止</span>
                     </div>
                 </div>
                 <div class="card-body" style="padding: 0;">
                     <div class="canvas-container">
                         <canvas id="cvcont" width="3200" height="3200"></canvas>
                         <div class="canvas-controls">
-							<button class="btn" onclick="resetScale()">Reset Zoom</button>
-							<button class="btn" onclick="toggleSegmentInfo()">Toggle Segment Info</button>
+							<button class="btn" onclick="resetScale()">重置缩放</button>
+							<button class="btn" onclick="toggleSegmentInfo()">显示区段信息</button>
 						</div>
                     </div>
                 </div>
@@ -510,57 +510,57 @@
             
             <!-- 快速链接和批量处理 -->
             <div class="card">
-                <div class="card-header">Utilities</div>
+                <div class="card-header">工具和链接</div>
                 <div class="card-body">
                     <div class="quick-links">
-                        <a href="/befehlgui" target="_blank" class="quick-link">Shunting Command</a>
-                        <a href="/signaldisp" target="_blank" class="quick-link">Signal Display (Alternative)</a>
-                        <a href="/signaladdisp" target="_blank" class="quick-link">Additional Information</a>
-                        <a href="javascript:;" class="quick-link" onclick="toggleBatchProcess()">Batch Process</a>
+                        <a href="/befehlgui" target="_blank" class="quick-link">命令交付</a>
+                        <a href="/signaldisp" target="_blank" class="quick-link">信号显示</a>
+                        <a href="/signaladdisp" target="_blank" class="quick-link">附加信息</a>
+                        <a href="javascript:;" class="quick-link" onclick="toggleBatchProcess()">批量处理</a>
                     </div>
                     
                     <div class="batch-process" id="batch_proc" style="display: none;">
                         <div class="alert alert-warning">
-                            Tip: Batch Process allows you to configure multiple signals.
+                            批量处理功能允许您一次性设置多个信号状态。
                         </div>
                         
                         <div class="step">
-                            <div class="step-title">Step 1: Select Path</div>
+                            <div class="step-title">步骤 1: 选择路径</div>
                             <div class="form-group">
-                                <label class="form-label" for="sgvon">From: </label>
-                                <input type="text" id="sgvon" class="form-control" placeholder="Input Signal Name">
+                                <label class="form-label" for="sgvon">起点</label>
+                                <input type="text" id="sgvon" class="form-control" placeholder="输入起点信号">
                             </div>
                             <div class="form-group">
-                                <label class="form-label" for="sgnach">To: </label>
-                                <input type="text" id="sgnach" class="form-control" placeholder="Input Signal Name">
+                                <label class="form-label" for="sgnach">终点</label>
+                                <input type="text" id="sgnach" class="form-control" placeholder="输入终点信号">
                             </div>
                             <div class="checkbox-group">
                                 <input type="checkbox" id="no_red">
-                                <label for="no_red">Avoid signals at Danger</label>
+                                <label for="no_red">避开危险信号</label>
                             </div>
-                            <button class="btn" onclick="generatePath();">Generate Path</button>
+                            <button class="btn" onclick="generatePath();">生成路径</button>
                         </div>
                         
                         <div class="step">
-                            <div class="step-title">Step 2: Specify Signals</div>
+                            <div class="step-title">步骤 2: 指定路径</div>
                             <div class="form-group">
-                                <label class="form-label" for="sgnames">Signal List (split by comma)</label>
-                                <textarea id="sgnames" class="form-control" rows="4" placeholder="Input Signal Names split by (','). This text may be automatically generated by the previous step."></textarea>
+                                <label class="form-label" for="sgnames">信号列表 (用逗号分隔)</label>
+                                <textarea id="sgnames" class="form-control" rows="4" placeholder="输入信号名称，用逗号分隔"></textarea>
                             </div>
                         </div>
                         
                         <div class="step">
-                            <div class="step-title">Step 3: Take Action</div>
+                            <div class="step-title">步骤 3: 执行设置</div>
                             <div class="checkbox-group">
                                 <input type="radio" id="diverg_mode" name="exec_mode">
-                                <label for="diverg_mode">Configure diverging as the given order in the previous step</label>
+                                <label for="diverg_mode">配置转辙轨道</label>
                             </div>
                             <div class="checkbox-group">
                                 <input type="radio" id="signal_mode" name="exec_mode">
-                                <label for="signal_mode">Configure all signals as:</label>
+                                <label for="signal_mode">配置信号为:</label>
                                 <input type="text" id="signal_conf" class="form-control" style="width: 100px; margin-left: 10px;">
                             </div>
-                            <button class="btn btn-success" onclick="proceed()">Execute</button>
+                            <button class="btn btn-success" onclick="proceed()">开始执行</button>
                         </div>
                         
                         <div class="progress-bar">
@@ -569,9 +569,9 @@
                         <div id="progress" style="color: green; font-size: 14px;"></div>
                         
                         <div class="form-group" style="margin-top: 15px;">
-                            <label class="form-label">Result</label>
+                            <label class="form-label">执行结果</label>
                             <div class="result-box" id="execresult"></div>
-                            <button class="btn" onclick="document.getElementById('execresult').innerHTML = '';" style="margin-top: 10px;">Clear Result</button>
+                            <button class="btn" onclick="document.getElementById('execresult').innerHTML = '';" style="margin-top: 10px;">清除结果</button>
                         </div>
                     </div>
                 </div>
@@ -854,13 +854,13 @@
         var exec_target = [], exec_para = null;
 
         function end_diverg() {
-            document.getElementById('progress').innerHTML = "Complete!";
+            document.getElementById('progress').innerHTML = "完成!";
             document.getElementById('execresult').innerHTML = exec_result;
             document.getElementById('progress-bar').style.width = '100%';
         }
 
         function end_signal() {
-            document.getElementById('progress').innerHTML = "Complete!";
+            document.getElementById('progress').innerHTML = "完成!";
             document.getElementById('execresult').innerHTML = exec_result;
             document.getElementById('progress-bar').style.width = '100%';
         }
@@ -870,7 +870,7 @@
                 end_diverg();
                 return;
             }
-            document.getElementById('progress').innerHTML = n + " / " + (exec_target.length - 1) + " Completed";
+            document.getElementById('progress').innerHTML = n + " / " + (exec_target.length - 1) + " 已完成";
             document.getElementById('progress-bar').style.width = (n / (exec_target.length - 1) * 100) + '%';
             var xhr = new XMLHttpRequest();
             var sp = document.getElementById('spwd');
@@ -890,7 +890,7 @@
                 return;
             }
             var xhr = new XMLHttpRequest();
-            document.getElementById('progress').innerHTML = n + " / " + (exec_target.length) + " Completed";
+            document.getElementById('progress').innerHTML = n + " / " + (exec_target.length) + " 已完成";
             document.getElementById('progress-bar').style.width = (n / exec_target.length * 100) + '%';
             var sp = document.getElementById('spwd');
             xhr.open('GET', "/signalset?sid=" + exec_target[n] + "&stat=" + exec_para + "&auth=" + sp.value);
@@ -916,7 +916,7 @@
                 exec_para = document.getElementById('signal_conf').value;
                 set_signal(0);
             } else {
-                alert("Please set configuration mode from 2 options first!");
+                alert("请选择执行模式!");
             }
         }
         window.onload = function() {
@@ -1202,30 +1202,31 @@ function isPointNearLine(px, py, x1, y1, x2, y2, threshold) {
 	<div class="modal" id="segmentModal">
     <div class="modal-content">
         <div class="modal-header">
-            <h3 class="modal-title">Signal Operation</h3>
+            <h3 class="modal-title">区段操作</h3>
             <button class="close-btn" onclick="closeSegmentModal()">&times;</button>
         </div>
         <div class="modal-body">
             <div class="segment-info">
-                <p><strong>Signal Name:</strong> <span id="modalSegmentId">-</span></p>
-                <p><strong>Current State:</strong> <span id="modalSegmentStatus">-</span></p>
-                <p><strong>Occupied By:</strong> <span id="modalSegmentDiverg">-</span></p>
+                <p><strong>区段 ID:</strong> <span id="modalSegmentId">-</span></p>
+                <p><strong>当前状态:</strong> <span id="modalSegmentStatus">-</span></p>
+				<!-- I modified this. -->
+                <p><strong>区间占用状态:</strong> <span id="modalSegmentDiverg">-</span></p>
             </div>
             <div class="form-group">
-                <label class="form-label" for="modalSegmentAction">Select Operation:</label>
+                <label class="form-label" for="modalSegmentAction">操作类型</label>
                 <select id="modalSegmentAction" class="form-control">
-                    <option value="signal">Configure signal state</option>
-                    <option value="diverg">Configure diverging</option>
+                    <option value="signal">设置信号状态</option>
+                    <option value="diverg">设置转辙轨道</option>
                 </select>
             </div>
             <div class="form-group">
-                <label class="form-label" for="modalSegmentValue">As:</label>
+                <label class="form-label" for="modalSegmentValue">目标值</label>
                 <input type="text" id="modalSegmentValue" class="form-control" placeholder="输入目标状态">
             </div>
         </div>
         <div class="modal-footer">
-            <button class="btn" onclick="closeSegmentModal()">Cancel</button>
-            <button class="btn btn-success" onclick="applySegmentAction()">Apply</button>
+            <button class="btn" onclick="closeSegmentModal()">取消</button>
+            <button class="btn btn-success" onclick="applySegmentAction()">应用</button>
         </div>
     </div>
 </div>
