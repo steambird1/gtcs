@@ -242,7 +242,7 @@
             background-color: var(--success);
         }
         
-        .status-yellow {
+        .status-orange {
             background-color: var(--warning);
         }
         
@@ -491,7 +491,7 @@
                     <div class="signal-status">
                         <div class="status-indicator status-green"></div>
                         <span>Clear</span>
-                        <div class="status-indicator status-yellow" style="margin-left: 15px;"></div>
+                        <div class="status-indicator status-orange" style="margin-left: 15px;"></div>
                         <span>Restricted</span>
                         <div class="status-indicator status-red" style="margin-left: 15px;"></div>
                         <span>Occupied/Danger</span>
@@ -1030,8 +1030,8 @@
 						if (hoveredSegment.length >= 10) zu = " " + hoveredSegment[9];
 						tooltip.innerHTML = hoveredSegment[0] + ": " + hoveredSegment[5] + " & " + hoveredSegment[8] + zu;
 						tooltip.style.display = 'block';
-						tooltip.style.left = (e.clientX + 10) + 'px';
-						tooltip.style.top = (e.clientY + 10) + 'px';
+						tooltip.style.left = (e.clientX + 10 + window.scrollX) + 'px';
+						tooltip.style.top = (e.clientY + 10 + window.scrollY) + 'px';
 					} else {
 						tooltip.style.display = 'none';
 					}
@@ -1156,13 +1156,24 @@ function isPointNearLine(px, py, x1, y1, x2, y2, threshold) {
 		function showSegmentModal(segmentData) {
 			document.getElementById('modalSegmentId').textContent = segmentData[0];
 			document.getElementById('modalSegmentStatus').textContent = segmentData[5];
-			document.getElementById('modalSegmentDiverg').textContent = segmentData[8];
+			let zu = "";
+			if (hoveredSegment.length >= 10) zu = " " + hoveredSegment[9];
+			document.getElementById('modalSegmentDiverg').textContent = segmentData[8] + zu;
 			
 			// 预填充操作表单
 			document.getElementById('sname').value = segmentData[0];
 			
 			// 显示模态框
 			document.getElementById('segmentModal').style.display = 'flex';
+			
+			const checking = ["red", "orange", "green"];
+			for (let i = 0; i < checking.length; i++) {
+				let sts = "status-" + checking[i];
+				if (document.getElementById('segmentInd').classList.contains(sts)) {
+					document.getElementById('segmentInd').classList.remove(sts);
+				}
+			}
+			document.getElementById('segmentInd').classList.add("status-" + sigcolor(segmentData[5]));
 		}
 
 		// 关闭模态框
@@ -1208,7 +1219,10 @@ function isPointNearLine(px, py, x1, y1, x2, y2, threshold) {
         <div class="modal-body">
             <div class="segment-info">
                 <p><strong>Signal Name:</strong> <span id="modalSegmentId">-</span></p>
-                <p><strong>Current State:</strong> <span id="modalSegmentStatus">-</span></p>
+				<div class="signal-status">
+					<p><strong>Current State:</strong> <span id="modalSegmentStatus">-</span></p>
+					<div class="status-indicator" id="segmentInd" style="margin-left: 15px;"></div>
+                </div>
                 <p><strong>Occupied By:</strong> <span id="modalSegmentDiverg">-</span></p>
             </div>
             <div class="form-group">
@@ -1220,7 +1234,7 @@ function isPointNearLine(px, py, x1, y1, x2, y2, threshold) {
             </div>
             <div class="form-group">
                 <label class="form-label" for="modalSegmentValue">As:</label>
-                <input type="text" id="modalSegmentValue" class="form-control" placeholder="输入目标状态">
+                <input type="text" id="modalSegmentValue" class="form-control" placeholder="Input target state...">
             </div>
         </div>
         <div class="modal-footer">

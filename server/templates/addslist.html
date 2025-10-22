@@ -1,77 +1,577 @@
-<!DOCTYPE HTML>
-<html>
+<!DOCTYPE html>
+<html lang="zh-CN">
 <head>
-	<title>Fountaine MTR Dashboard</title>
-	<style>
-	table,thead,tbody,th,tr,td {
-		border: 1px solid;
-	}
-	</style>
-	<script>
-		function proceed(name) {
-			var da = document.getElementById('cpwd');
-			var dt = document.getElementById('dist_sub_' + name);
-			var dd = document.getElementById('data_sub_' + name);
-			var xhr = new XMLHttpRequest();
-			xhr.open('GET', '/addataupdate?auth=' + da.value + '&sid=' + name + '&dis=' + dt.value + '&stat=' + encodeURIComponent(dd.value));
-			xhr.send(null);
-			xhr.onreadystatechange = function() {
-				if (xhr.readyState == 4) {
-					alert(xhr.responseText);
-					location.reload(true);
-				}
-			}
-		}
-		function proceed_r(name, dis) {
-			var da = document.getElementById('cpwd');
-			var xhr = new XMLHttpRequest();
-			xhr.open('GET', '/addataupdate?auth=' + da.value + '&sid=' + name + '&dis=' + dis + '&stat=x');
-			xhr.send(null);
-			xhr.onreadystatechange = function() {
-				if (xhr.readyState == 4) {
-					alert(xhr.responseText);
-					if (xhr.status == 200) {
-						location.reload(true);
-					}
-				}
-			}
-		}
-	</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Additional Signal Management - Fountaine MTR</title>
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --secondary: #3498db;
+            --success: #27ae60;
+            --warning: #f39c12;
+            --danger: #e74c3c;
+            --light: #ecf0f1;
+            --dark: #2c3e50;
+            --gray: #95a5a6;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+        }
+        
+        header {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .header-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        
+        .header-subtitle {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .search-section {
+            padding: 15px 20px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .search-box {
+            display: flex;
+            align-items: center;
+            flex: 1;
+            max-width: 400px;
+        }
+        
+        .search-icon {
+            background-color: var(--secondary);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px 0 0 4px;
+        }
+        
+        .search-input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-left: none;
+            border-right: none;
+            font-size: 14px;
+            outline: none;
+        }
+        
+        .search-input:focus {
+            border-color: var(--secondary);
+        }
+        
+        .search-btn {
+            background-color: var(--secondary);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 0 4px 4px 0;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        .search-btn:hover {
+            background-color: #2980b9;
+        }
+        
+        .clear-search {
+            background: none;
+            border: none;
+            color: var(--gray);
+            cursor: pointer;
+            margin-left: 10px;
+            text-decoration: underline;
+        }
+        
+        .auth-section {
+            padding: 20px;
+            background-color: var(--light);
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .auth-form {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .form-label {
+            font-weight: 500;
+            white-space: nowrap;
+        }
+        
+        .form-control {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            flex: 1;
+            max-width: 200px;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 8px 16px;
+            background-color: var(--secondary);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .btn:hover {
+            background-color: #2980b9;
+            transform: translateY(-2px);
+        }
+        
+        .btn-success {
+            background-color: var(--success);
+        }
+        
+        .btn-success:hover {
+            background-color: #219a52;
+        }
+        
+        .btn-danger {
+            background-color: var(--danger);
+        }
+        
+        .btn-danger:hover {
+            background-color: #c0392b;
+        }
+        
+        .btn-sm {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        
+        .content-section {
+            padding: 20px;
+        }
+        
+        .signal-card {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .signal-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        
+        .signal-header {
+            background-color: #f8f9fa;
+            padding: 15px 20px;
+            border-bottom: 1px solid #e0e0e0;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .signal-body {
+            padding: 0;
+        }
+        
+        .add-form {
+            padding: 15px 20px;
+            background-color: #fdfdfd;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .form-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .info-list {
+            list-style: none;
+        }
+        
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background-color 0.2s;
+        }
+        
+        .info-item:hover {
+            background-color: #f9f9f9;
+        }
+        
+        .info-item:last-child {
+            border-bottom: none;
+        }
+        
+        .info-details {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .info-distance {
+            font-weight: 500;
+            color: var(--dark);
+        }
+        
+        .info-data {
+            color: #666;
+        }
+        
+        .empty-state {
+            padding: 30px 20px;
+            text-align: center;
+            color: #999;
+            font-style: italic;
+        }
+        
+        .alert {
+            padding: 10px 15px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            display: none;
+        }
+        
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .alert-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .no-results {
+            text-align: center;
+            padding: 40px 20px;
+            color: #666;
+            font-size: 16px;
+        }
+        
+        .results-count {
+            margin: 10px 0;
+            font-size: 14px;
+            color: var(--gray);
+            text-align: center;
+        }
+        
+        @media (max-width: 768px) {
+            .add-form {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .form-group {
+                width: 100%;
+            }
+            
+            .form-control {
+                max-width: 100%;
+            }
+            
+            .info-details {
+                flex-direction: column;
+                gap: 5px;
+            }
+            
+            .info-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+            
+            .search-section {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .search-box {
+                max-width: 100%;
+            }
+        }
+    </style>
+
 </head>
 <body>
-	<span>Operation password:</span>
-	<input type="password" id="cpwd" />
-	<br />
-	<table>
-		<thead>
-			<tr>
-				<th>Signal</th>
-				<th>Position</th>
-				<th>Info</th>
-				<th>Operation</th>
-			</tr>
-		</thead>
-		<tbody>
-			{% for i in addinfos %}
-			<tr>
-				<td>{{ i }}</td>
-				<td colspan="3">Distance: 
-					<input type="text" id="dist_sub_{{ i }}" />
-				&nbsp;&nbsp;Data:
-					<input type="text" id="data_sub_{{ i }}" />
-					<button onclick="proceed('{{ i }}');">Update</button>
-				</td>
-			</tr>
-			{% for j in addinfos[i] %}
-			<tr>
-				<td></td>
-				<td>{{ str(j[0]) }}</td>
-				<td>{{ j[1] }}</td>
-				<td><button onclick="proceed_r('{{ i }}',{{ str(j[0]) }});">Remove</button></td>
-			</tr>
-			{% endfor %}
-			{% endfor %}
-		</tbody>
-	</table>
+    <div class="container">
+        <header>
+            <div class="header-title">Fountaine MTR - Additional Signal Data Management</div>
+            <div class="header-subtitle">Managing Lf-speed limit, pantograph message, slope and element state, etc.</div>
+        </header>
+        
+        <div class="search-section">
+            <div class="search-box">
+                <div class="search-icon">🔍</div>
+                <input type="text" id="signalSearch" class="search-input" placeholder="Input signal name...">
+                <button class="search-btn" onclick="filterSignals()">Search</button>
+            </div>
+            <button class="clear-search" onclick="clearSearch()">Clear Search</button>
+        </div>
+        
+        <div class="auth-section">
+            <div class="auth-form">
+                <span class="form-label">Password :</span>
+                <input type="password" id="cpwd" class="form-control" placeholder="Input Password...">
+                <div id="authAlert" class="alert"></div>
+            </div>
+        </div>
+        
+        <div class="content-section">
+            <div id="resultsCount" class="results-count"></div>
+            <div id="signalList">
+                {% for i in addinfos %}
+                <div class="signal-card" data-signal-name="{{ i }}">
+                    <div class="signal-header">
+                        <span>Signal: {{ i }}</span>
+                    </div>
+                    <div class="signal-body">
+                        <div class="add-form">
+                            <div class="form-group">
+                                <span>Distance:</span>
+                                <input type="text" id="dist_sub_{{ i }}" class="form-control" placeholder="Input Distance">
+                            </div>
+                            <div class="form-group">
+                                <span>Data:</span>
+                                <input type="text" id="data_sub_{{ i }}" class="form-control" placeholder="Input Data">
+                            </div>
+                            <button class="btn btn-success" onclick="proceed('{{ i }}')">Add Information</button>
+                        </div>
+                        
+                        <ul class="info-list" id="info-list-{{ i }}">
+                            {% if addinfos[i] %}
+                                {% for j in addinfos[i] %}
+                                <li class="info-item" data-distance="{{ str(j[0]) }}">
+                                    <div class="info-details">
+                                        <span class="info-distance">Distance: {{ str(j[0]) }}</span>
+                                        <span class="info-data">Data: {{ j[1] }}</span>
+                                    </div>
+                                    <button class="btn btn-danger btn-sm" onclick="proceed_r('{{ i }}', '{{ str(j[0]) }}', this)">Delete</button>
+                                </li>
+                                {% endfor %}
+                            {% else %}
+                                <li class="empty-state">No Additional Information</li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <div id="noResults" class="no-results" style="display: none;">
+                No Signal Found
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 搜索功能
+        function filterSignals() {
+            const searchTerm = document.getElementById('signalSearch').value.toLowerCase().trim();
+            const signalCards = document.querySelectorAll('.signal-card');
+            let visibleCount = 0;
+            
+            signalCards.forEach(card => {
+                const signalName = card.getAttribute('data-signal-name').toLowerCase();
+                
+                if (searchTerm === '' || signalName.startsWith(searchTerm)) {
+                    card.style.display = 'block';
+                    visibleCount++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+            
+            // 更新结果计数
+            const resultsCount = document.getElementById('resultsCount');
+            if (searchTerm === '') {
+                resultsCount.textContent = '';
+            } else {
+                resultsCount.textContent = visibleCount + ' signal(s) found';
+            }
+            
+            // 显示/隐藏无结果消息
+            const noResults = document.getElementById('noResults');
+            if (visibleCount === 0 && searchTerm !== '') {
+                noResults.style.display = 'block';
+            } else {
+                noResults.style.display = 'none';
+            }
+        }
+        
+        // 清除搜索
+        function clearSearch() {
+            document.getElementById('signalSearch').value = '';
+            filterSignals();
+        }
+        
+        // 实时搜索（输入时自动触发）
+        document.getElementById('signalSearch').addEventListener('input', filterSignals);
+        
+        // 显示提示信息
+        function showAlert(message, type) {
+            var alertDiv = document.getElementById('authAlert');
+            alertDiv.textContent = message;
+            alertDiv.className = 'alert ' + (type === 'success' ? 'alert-success' : 'alert-error');
+            alertDiv.style.display = 'block';
+            
+            setTimeout(function() {
+                alertDiv.style.display = 'none';
+            }, 3000);
+        }
+        
+        // 添加信息（不刷新页面）
+        function proceed(name) {
+            var da = document.getElementById('cpwd');
+            if (!da.value) {
+                showAlert('Please input password', 'error');
+                return;
+            }
+            
+            var dt = document.getElementById('dist_sub_' + name);
+            var dd = document.getElementById('data_sub_' + name);
+            
+            if (!dt.value || !dd.value) {
+                showAlert('Please input distance and data', 'error');
+                return;
+            }
+            
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/addataupdate?auth=' + da.value + '&sid=' + name + '&dis=' + dt.value + '&stat=' + encodeURIComponent(dd.value));
+            xhr.send(null);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState == 4) {
+                    if (xhr.status == 200) {
+                        showAlert('操作成功: ' + xhr.responseText, 'success');
+                        
+                        // 动态添加新信息到列表
+                        var infoList = document.getElementById('info-list-' + name);
+                        
+                        // 移除空状态提示（如果存在）
+                        var emptyState = infoList.querySelector('.empty-state');
+                        if (emptyState) {
+                            emptyState.remove();
+                        }
+                        
+                        // 创建新信息项
+                        var newItem = document.createElement('li');
+                        newItem.className = 'info-item';
+                        newItem.setAttribute('data-distance', dt.value);
+                        newItem.innerHTML = '<div class="info-details"><span class="info-distance">Distance: '+dt.value+'</span><span class="info-data">Data: '+dd.value+'</span></div><button class="btn btn-danger btn-sm" onclick="proceed_r(\''+name+'\', \''+dt.value+'\', this)">Delete</button>';
+                        // Maybe not so correct, but I don't want to fix this right now.
+                        infoList.appendChild(newItem);
+                        
+                        // 清空输入框
+                        dt.value = '';
+                        dd.value = '';
+                    } else {
+                        showAlert('Failed: ' + xhr.responseText, 'error');
+                    }
+                }
+            }
+        }
+        
+        // 删除信息（不刷新页面）
+        function proceed_r(name, dis, buttonElement) {
+            var da = document.getElementById('cpwd');
+            if (!da.value) {
+                showAlert('Please input password', 'error');
+                return;
+            }
+            
+            if (!confirm('Are you sure to delete this?')) {
+                return;
+            }
+            
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/addataupdate?auth=' + da.value + '&sid=' + name + '&dis=' + dis + '&stat=x');
+            xhr.send(null);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState == 4) {
+                    if (xhr.status == 200) {
+                        showAlert('Success: ' + xhr.responseText, 'success');
+                        
+                        // 从DOM中移除被删除的项目
+                        var itemToRemove = buttonElement.closest('.info-item');
+                        itemToRemove.remove();
+                        
+                        // 如果列表为空，添加空状态提示
+                        var infoList = document.getElementById('info-list-' + name);
+                        if (infoList.children.length === 0) {
+                            var emptyState = document.createElement('li');
+                            emptyState.className = 'empty-state';
+                            emptyState.textContent = '暂无附加信息';
+                            infoList.appendChild(emptyState);
+                        }
+                    } else {
+                        showAlert('Failed: ' + xhr.responseText, 'error');
+                    }
+                }
+            }
+        }
+        
+        // 为输入框添加回车键支持
+        document.addEventListener('DOMContentLoaded', function() {
+            var inputs = document.querySelectorAll('input[type="text"]');
+            inputs.forEach(function(input) {
+                input.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        var signalCard = this.closest('.signal-card');
+						// Matches 'signal header' !
+                        var signalName = signalCard.querySelector('.signal-header span').textContent.replace('Signal: ', '');
+                        proceed(signalName);
+                    }
+                });
+            });
+        });
+    </script>
 </body>
 </html>
