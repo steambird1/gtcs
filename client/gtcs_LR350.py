@@ -6,9 +6,16 @@ from urllib import request
 import threading
 import random
 import os
+import copy
 from collections import deque
 
+# Changelog: Geo element (and relevant malfunctions), national bg (incomplete), slope and friction (incomplete)
+# auto upgrade/downgrade (incomplete), announcement (incomplete)
+
+# For linux?
+SPECIAL_KEY = False
 VENTI = True
+
 try:
     from playsound import playsound
 except:
@@ -58,8 +65,23 @@ schutz = False
 schutz_info = ""
 has_afb = False
 passing = False
+# TODO: National backgroud element values to be updated
+anemo_bg = 0
+electro_vbg = 0
+electro_abg = 0
+geo_bg = 0
 
-asuber=0
+current_slope = 0
+
+# TODO: Announcement signals
+ANNOUNCEMENT_AT = [2000,1000,500,200]
+MONITOR_SPEED_DELTA = [0,30,15,5]
+MONITOR_ACCEL = [0.2,0.5,1.6,2]
+announcement_got = [False] * len(ANNOUNCEMENT_AT)
+announced_name = "?"
+announced_sig = "?"
+
+asuber = 0
 
 extcmd = []
 lastseg = []
@@ -83,18 +105,24 @@ eamps = 0
 efreq = 50
 # Unit: A*h
 # Maintained by the same thread.
-battery_charge = 5
+battery_charge = 50
 MAX_BAT_CAPACITY = 200
 batvolts = 0
 batamps = 0
 batregen = False
 onbat = False
 servolts = 0
+# Geo element added, keyword 'geo'
+geo_elem = 0
+# Respectively use 'P', 'K', 'L' (Shift + letter) to charge.
+dendro_mass = 0
+dendro_feed = 0
+pyro_temp = 0
 #servamps = 0
 
-# 'a' or 'e'
+# 'a' or 'e'. 'd' and 'y' should be engaged using Shift + A
 cpsrc = "a"
-cptype = {"a": "Anemo", "e": "Electro", "p": "Pantograph"}
+cptype = {"a": "Anemo", "e": "Electro", "p": "Pantograph", "d": "Dendro"}
 # 'x' for empty page
 syspages = {
     "q": [
@@ -120,9 +148,102 @@ syspages = {
         [lambda: ("{} A".format(round(eamps, 1))),
          lambda: ("red" if (((cpsrc == "e") and (eamps < 0.1)) or eamps > 100) else MYGREEN)]
     ],
+    't': [
+        [lambda: cptype[cpsrc], lambda: MYWHITE],
+        [lambda: "Geo", lambda: MYWHITE],
+        [lambda: ("{} u".format(round(geo_elem, 1))),
+         lambda: (MYWHITE if (geo_elem < 1.5) else MYGREEN)]
+    ],
+    'y': [
+        [lambda: cptype[cpsrc], lambda: MYWHITE],
+        [lambda: "{} kg".format(round(dendro_mass, 1)), lambda: "red" if (cpsrc == "d" and dendro_mass <= 2) else MYWHITE],
+        [lambda: "No feed" if (dendro_feed <= 0) else "{} kg/min".format(round(dendro_feed, 1)), lambda: MYWHITE if (dendro_feed <= 0) else MYGREEN],
+        [lambda: ("{} K".format(round(pyro_temp, 1))),
+         lambda: (MYWHITE if (pyro_temp < 350) else ("red" if (pyro_temp > 1050) else MYGREEN))]
+    ],
     "x": []
 }
 csyspage = "q"
+
+
+def assign(x, attrib, val):
+    x[attrib] = val
+
+# Carriage system. d & dg & y are reserved for Dendro / Pyro system.
+# Make sure to copy for each use.
+PWRCAR = {
+    "weight": 30,
+    "a": 2,
+    "g": 2,
+    "e": 2,
+    "p": 2,
+    "d": 2,
+    "dg": 0.5,
+    "y": 2,
+    "loco": True,
+    "cat": "pwrcar",
+    "failures": {
+        "was_failure": {},
+        "sch_failure": ["fire"],
+        "term": {
+            "smoke": ["Lavatory Smoke", False, lambda x: False, lambda x: True, lambda x: None, lambda x: None],
+            "fire": ["Fire", False, lambda x: False, lambda x: True, lambda x: None, lambda x: None],
+            "anemo_fail": ["Anemo Inop", False, lambda x: False, lambda x: ("a" in x) and (x["a"]), lambda x: assign(x, 'a', 0), lambda x: assign(x, 'a', 1)],
+            "geo_fail": ["Geo Inop", False, lambda x: False, lambda x: ("g" in x) and (x["g"]), lambda x: assign(x, 'g', 0), lambda x: assign(x, 'g', 1)],
+            "electro_fail": ["Electro Inop", False, lambda x: False, lambda x: ("e" in x) and (x["e"]), lambda x: assign(x, 'e', 0), lambda x: assign(x, 'e', 1)],
+            "panto_fail": ["Panto Inop", False, lambda x: False, lambda x: ("p" in x) and (x["p"]), lambda x: assign(x, 'p', 0), lambda x: assign(x, 'p', 1)],
+            "dendro_fail": ["Dendro Inop", False, lambda x: False, lambda x: ("d" in x) and (x["d"]), lambda x: assign(x, 'd', 0), lambda x: assign(x, 'd', 1)],
+            "pyro_fail": ["Pyro Inop", False, lambda x: False, lambda x: ("y" in x) and (x["y"]), lambda x: assign(x, 'y', 0), lambda x: assign(x, 'y', 1)]
+        }
+    }
+}
+
+NORMCAR = {
+    "weight": 30,
+    "cat": "normcar",
+    "failures": {
+        "was_failure": {},
+        "sch_failure": ["fire"],
+        "term": {
+            "smoke": ["Lavatory Smoke", False, lambda x: False, lambda x: True, lambda x: None, lambda x: None],
+            "fire": ["Fire", False, lambda x: False, lambda x: True, lambda x: None, lambda x: None],
+        }
+    }
+}
+
+# For 120km/h version, there's power car only initially
+cars = [
+    copy.deepcopy(PWRCAR)
+] + [
+    copy.deepcopy(NORMCAR) for i in range(7)   
+]
+
+# "_" is for the default
+cardisp = {
+    "_": {
+        "shape": "normal",
+        "panto": lambda x: False,
+        "disp": []
+    },
+    "normcar": {
+        "shape": "normal",
+        "panto": lambda x: False,
+        "disp": [
+            [lambda x: "Fire" if ("fire" in x["failures"]["term"]) and (x["failures"]["term"]["fire"][1]) else "", lambda x: "red"]
+        ]
+    },
+    "pwrcar": {
+        "shape": "pwrcar",
+        "panto": lambda x: (x["p"]) if ("p" in x) else 0,
+        "disp": [
+            [lambda x: (cptype[cpsrc])[:3] if (cpsrc in x) else "", lambda x: (MYGREEN) if ((cpsrc in x) and (x[cpsrc])) else "white"],
+            [lambda x: "Fire" if ("fire" in x["failures"]["term"]) and (x["failures"]["term"]["fire"][1]) else "", lambda x: "red"]
+        ]
+    }
+}
+
+# Connection/disconnection of carriages is only allowed under Passing Mode
+
 
 failures = {
     "thr": ["Thrust No Response", False, lambda: False],
@@ -147,9 +268,17 @@ failures = {
     "bepwrslo": ["Electro BAT Amps Low", False, lambda: ((batamps < 0.1))],
     "bepwrshi": ["Electro BAT Amps High", False, lambda: batamps > 100],
     "depwrlo": ["Electro DC Service Volts Low", False, lambda: ((servolts < 18))],
-    "depwrhi": ["Electro DC Service Volts High", False, lambda: servolts > 64]
+    "depwrhi": ["Electro DC Service Volts High", False, lambda: servolts > 64],
+    "geofail": ["Geo Inoperative", False, lambda: False],
+    "denlo": ["Dendro Weight Low", False, lambda: (cpsrc == "d" and dendro_mass < 2)],
+    "pyrolo": ["Pyro Temperature Low", False, lambda: (cpsrc == "d" and pyro_temp < 350)],
+    "pyrohi": ["Pyro Temperature High", False, lambda: pyro_temp > 1050]
 }
 # balo also has special events
+
+def car_stat(key):
+    global cars
+    return sum([i[key] if (key in i) else 0 for i in cars])
 
 def each_panto_amps():
     if cpsrc != "p":
@@ -171,12 +300,6 @@ def each_panto_volts():
 was_failure = {}
 sch_failure = []
 
-# 16 Carriages
-for i in range(1,17):
-    failures["car"+str(i)+"smoke"] = ["Carriage " + str(i) + " Lavatory Smoke", False, lambda: False]
-    failures["car"+str(i)+"fire"] = ["Carriage " + str(i) + " Fire", False, lambda: False]
-    sch_failure.append("car"+str(i)+"fire")
-
 for i in failures:
     was_failure[i] = False
     
@@ -184,14 +307,21 @@ def ok_motor_count():
     return (0 if failures["motor1"][1] else 1) + (0 if failures["motor2"][1] else 1)
 
 def maxthr_val():
-    global apress, cevolts, ceamps, batvolts, batamps, cpsrc, failures
+    global apress, cevolts, ceamps, batvolts, batamps, cpsrc, failures, dendro_mass, pyro_temp
     res = 0
     ok_motor = ok_motor_count()
     if cpsrc == "a":
         res = apress * 1.5
+    elif cpsrc == "d":
+        # Time matters
+        if apress < 60:
+            aspd = 2*math.pi
+        else:
+            aspd = 2*math.pi/(apress/60)
+        res = max(0,math.sin(aspd*time.time())*dendro_mass*10 + dendro_mass*(pyro_temp/650)*20)
     else:
         res = ((cevolts + batvolts) * (ceamps + batamps)) / 750
-    return res * (ok_motor) / 2
+    return res * (ok_motor) * car_stat(cpsrc) / 2
 
 def motor_out():
     global thrust, curspeed
@@ -201,7 +331,6 @@ def motor_out():
         return 0
 
 ps_queue = deque()
-
 
 def start_sound(name):
     global VENTI, ps_queue
@@ -297,6 +426,7 @@ xspdraw.goto(-160, 40)
 lkjdraw.goto(-200, 200)
 gaspress.goto(160, 40)
 routedisp.goto(-340, 0)
+amdraw.goto(-160, -120)
 
 xspdraw.speed('fastest')
 befehldisp.speed('fastest')
@@ -370,7 +500,7 @@ ovrd_page = 'a'
 
 # Must be called AFTER main processor
 def render_anemo_power():
-    global apress, FONT, failures, evolts, eamps, cpsrc, battery_charge, batvolts, batamps, batregen, cevolts, ceamps
+    global apress, FONT, failures, evolts, eamps, cpsrc, battery_charge, batvolts, batamps, batregen, cevolts, ceamps, cars, cardisp
     amdraw.goto(-160, -120)
     amdraw.clear()
     if ovrd_main_disp:
@@ -559,6 +689,64 @@ def render_anemo_power():
             amdraw.write(str(round(m2out,1)) + " kW", align='center', font=FONT)
             amdraw.penup()
             amdraw.pencolor(MYWHITE)
+        elif ovrd_page == 'z':
+            # Draw train information
+            xcoord = -160
+            ycoord = -150
+            for i in cars:
+                amdraw.pencolor(MYWHITE)
+                amdraw.penup()
+                amdraw.goto(xcoord, ycoord)
+                graphtype = "_"
+                if "cat" in i:
+                    graphtype = i["cat"]
+                if cardisp[graphtype]["shape"] == "pwrcar":
+                    amdraw.goto(xcoord, ycoord - 20)
+                    amdraw.pendown()
+                    amdraw.goto(xcoord + 20, ycoord)
+                    amdraw.goto(xcoord + 30, ycoord)
+                    amdraw.goto(xcoord + 30, ycoord - 40)
+                    amdraw.goto(xcoord, ycoord - 40)
+                    amdraw.goto(xcoord, ycoord - 20)
+                else:
+                    amdraw.pendown()
+                    amdraw.goto(xcoord + 30, ycoord)
+                    amdraw.goto(xcoord + 30, ycoord - 40)
+                    amdraw.goto(xcoord, ycoord - 40)
+                    amdraw.goto(xcoord, ycoord)
+                amdraw.penup()
+                if cardisp[graphtype]["panto"](i):
+                    amdraw.goto(xcoord + 30, ycoord)
+                    # Check pantograph state
+                    try:
+                        if cpsrc == "p" and i["p"]:
+                            # Raised pantograph
+                            amdraw.pencolor(MYGREEN)
+                            amdraw.pendown()
+                            amdraw.goto(xcoord + 30, ycoord + 10)
+                            amdraw.goto(xcoord + 20, ycoord + 10)
+                            amdraw.goto(xcoord + 40, ycoord + 10)
+                            amdraw.penup()
+                            amdraw.pencolor(MYWHITE)
+                        else:
+                            amdraw.pendown()
+                            amdraw.goto(xcoord + 30, ycoord + 5)
+                            amdraw.goto(xcoord + 20, ycoord + 5)
+                            amdraw.goto(xcoord + 40, ycoord + 5)
+                            amdraw.penup()
+                    except KeyError as ke:
+                        pass
+                    except Exception as e:
+                        print(str(e))
+                amdraw.goto(xcoord + 10, ycoord - 20)
+                yaccu = 0
+                for j in cardisp[graphtype]["disp"]:
+                    amdraw.color(j[1](i))
+                    amdraw.write(j[0](i), font=FONT)
+                    amdraw.goto(xcoord + 10, ycoord - 20 - yaccu)
+                    yaccu += 20
+                # Allow overflowing currently
+                xcoord += 40
 
 def render_bar():
     turtle3.clear()
@@ -621,11 +809,12 @@ def render_bar():
 
 
 def render_route_tackle(csp, cx, cy):
-    global extcmd, lastseg, furseg, DRANGE, LEVEL, FONT, MYBLUE, MYGREEN, MYWHITE, curspeed, show_name
+    global extcmd, lastseg, furseg, DRANGE, LEVEL, FONT, MYBLUE, MYGREEN, MYWHITE, curspeed, show_name, announced_name, announced_sig, former_sid, former_signal
     if (len(csp) < 2):
         return
     dis = int(csp[0])
     routedisp.pencolor(MYBLUE)
+    prelevel = LEVEL
     if csp[1] == "La":
         if curspeed > int(csp[3]) or curspeed < int(csp[2]):
             routedisp.pencolor('orange')
@@ -635,11 +824,25 @@ def render_route_tackle(csp, cx, cy):
         routedisp.write("Lf ---", align='right', font=FONT)
     elif csp[1] == "T":
         routedisp.write(" ".join(csp[2:]), align='right', font=FONT)
+    elif csp[1] == "M":
+        routedisp.pencolor(MYWHITE)
+        if int(csp[2]) != prelevel:
+            prelevel = int(csp[2])
+            routedisp.write("GTCS " + str(csp[2]), align='right', font=FONT)
+    elif csp[1] == "O":
+        sloped = int(csp[2])
+        if sloped < 0:
+            routedisp.pencolor("orange")
+        else:
+            routedisp.pencolor(MYBLUE)
+        routedisp.write("Slope " + str(csp[2]), align='right', font=FONT)
     elif csp[1] == "S":
         # Draw signal lights, status represent at csp[3]:
         # routedisp.pencolor(MYWHITE)
         zud = 10
-        if LEVEL <= 2:
+        if (LEVEL <= 2) and (csp[2] == announced_name):
+            csp[3] = announced_sig
+        if (LEVEL <= 2) and (csp[2] != announced_name) and (LEVEL <= 1 or csp[2] != former_sid):
             routedisp.fillcolor('white')
             routedisp.begin_fill()
             routedisp.circle(3)
@@ -740,18 +943,18 @@ def render_route():
         routedisp.pencolor(MYBLUE)
         routedisp.write(str(round(cfurseg[0] / 1000, 2)), align='right', font=FONT)
 
+
 def render_t2bar():
     turtle2.clear()
     turtle2.penup()
     turtle2.goto(-300, 0)
-    for i in range(0,200,20):
+    for i in range(0, 200, 20):
         turtle2.goto(-300, i)
-        turtle2.write(str(i*20),font=FONT)
+        turtle2.write(str(i * 20), font=FONT)
+
 
 def gtcs3_load():
     global LEVEL, curspeed, lastspdlim, zusatz_lastspdlim, lbdisp, dif_warning
-    if LEVEL < 2:
-        return
     limdraw.showturtle()
     limdraw.clear()
     limdraw.penup()
@@ -766,6 +969,9 @@ def gtcs3_load():
         limdraw.goto(-320, -10)
         limdraw.end_fill()
         render_t2bar()
+    if LEVEL < 2:
+        limdraw.hideturtle()
+        return
     limdraw.goto(-320, 0)
     limdraw.pendown()
     limdraw.pencolor('orange')
@@ -817,28 +1023,72 @@ def gtcs3_exit(level=1):
     start_sound("gexit")
 
 
+def cdrawer(basex, basey, rad, func):
+    t = turtle
+    
+    # 绘制外圆
+    t.penup()
+    t.goto(basex, basey)
+    t.pendown()
+    t.circle(rad)
+    
+    # 绘制刻度线
+    for i in range(0, 300, 30):  # 每30度一个刻度
+        t.penup()
+        t.goto(basex, basey+rad)
+        t.setheading(210-i)  # 设置角度，0度在右侧
+        
+        # 移动到外圆位置
+        t.forward(rad)
+        t.pendown()
+        
+        # 绘制刻度线
+        if i % 60 == 0:  # 主刻度（长）
+            t.forward(10)
+        else:  # 次刻度（短）
+            t.forward(5)
+        
+        # 添加数字标签
+        if i % 60 == 0:
+            t.penup()
+            t.forward(5)  # 移动到数字位置
+            
+            # 根据角度调整数字方向，使其易于阅读
+            if (210-i) == 0 or (210-i) == 180:
+                t.write(str(func(i)), align="center", font=FONT)
+            elif (210-i) < 180:
+                t.write(str(func(i)), align="left", font=FONT)
+            else:
+                t.write(str(func(i)), align="right", font=FONT)
+    t.penup()
+    t.right(t.heading())
+
 # GTCS renderer
 def render_gtcs():
     global curspeed, spdlim, accreq, gtcsinfo, sysinfo, thrust
     turtle.clear()
     turtle.penup()
     turtle.goto(-160, 0)
-    turtle.pendown()
-    turtle.circle(80)
-    turtle.penup()
+    #turtle.pendown()
+    #turtle.circle(80)
+    #turtle.penup()
     # Set number indications
+    cdrawer(-160, 0, 80, lambda i: int(i * 1.5))
+    """
     turtle.goto(-160, 0)
     # turtle.circle(80, -60)
     for i in range(0, 300, 60):
         turtle.circle(80, -60)
+        #turtle.right(-90)
+        #turtle.forward(15)
         turtle.write(str(int(i*1.5)), font=FONT)
+        #turtle.forward(-15)
+        #turtle.left(-90)
+    """
+    
     turtle.right(turtle.heading())
     # turtle.circle(80, -60)
-    turtle.goto(160, 0)
-    turtle.pendown()
-    turtle.circle(80)
-    turtle.penup()
-    turtle.goto(160, 0)
+    cdrawer(160, 0, 80, lambda i: abs(i - 120) * 2)
     # turtle.circle(80, -60)
     #for i in range(0, 300, 60):
     #    turtle.circle(80, -60)
@@ -889,8 +1139,10 @@ gfailind = False
 klee_braked = False
 passenger_call = ""
 
+intervene_spd = USERLIM
+
 def render_gtcs_main():
-    global gfailind, prelkj, light, caccel, prereded, curspeed, acreqspd, spdlim, lastspdlim, accreq, gtcsinfo, sysinfo, thrust, eb, nextdist, failures, zusatz_lastspdlim, has_afb, klee_braked, passenger_call
+    global onbat, klee_braked, passenger_call, batregen, ovrd_main_disp, gfailind, prelkj, light, caccel, prereded, curspeed, intervene_spd, acreqspd, spdlim, lastspdlim, accreq, gtcsinfo, sysinfo, thrust, eb, nextdist, failures, zusatz_lastspdlim, has_afb, passing
     # print("GTCS Renderer")
     gaspress.clear()
     acreqer.hideturtle()
@@ -919,8 +1171,7 @@ def render_gtcs_main():
     spdturtle.right(curspeed / 1.5)
     spdturtle.forward(75)
     spdturtle.penup()
-    if LEVEL >= 2:
-        gtcs3_load()
+    gtcs3_load()
     spdraw.clear()
     maxspder.pendown()
     maxspder.right(spdlim / 1.5)
@@ -944,8 +1195,8 @@ def render_gtcs_main():
     acreqer.pendown()
     if (acreqspd) < curspeed:
         wacreqspd = curspeed + accreq * (20 * 3.6)
-        if wacreqspd < min(spdlim, lastspdlim, zusatz_lastspdlim):
-            wacreqspd = min(spdlim, lastspdlim, zusatz_lastspdlim)
+        if wacreqspd < min(spdlim, intervene_spd, lastspdlim, zusatz_lastspdlim):
+            wacreqspd = min(spdlim, intervene_spd, lastspdlim, zusatz_lastspdlim)
         acreqer.circle(80, (wacreqspd - curspeed) * (-1) / 1.5)
     acreqer.left(90)
     acreqer.penup()
@@ -1006,7 +1257,7 @@ def render_gtcs_main():
     cthrdraw.goto(160, 80)
     dthrust = int(thrust)
     if abs(thrust) < 10:
-        dthrust = round(thrust,1)
+        dthrust = round(thrust, 1)
     cthrdraw.write(str(min(999, dthrust)), align='center', font=FONT)
     infobar.clear()
     if thrust >= 0:
@@ -1042,6 +1293,16 @@ def render_gtcs_main():
                 gtcsinfo.append([failures[i][0], "maroon1"])
                 if not was_failure[i]:
                     start_sound("warning")
+        ccid = 1
+        for i in cars:
+            #print(i)
+            for jt in i["failures"]["term"]:
+                j = i["failures"]["term"][jt]
+                if j[1] or j[2](i):
+                    gtcsinfo.append(["Carriage " + str(ccid) + " " + j[0], "maroon1"])
+                    if (jt not in i["failures"]["was_failure"]) or (not i["failures"]["was_failure"][jt]):
+                        start_sound("warning")
+            ccid += 1
         for i in gtcsinfo:
             if DARK and i[1] == "blue":
                 i[1] = "cyan"
@@ -1129,7 +1390,7 @@ def render_gtcs_main():
 def kup(smooth=False):
     global power, thrust
     # print("Keyup")
-    if power > 400:
+    if power > 500:
         return
     if smooth:
         power += 1
@@ -1140,7 +1401,7 @@ def kup(smooth=False):
 def kdn(smooth=False):
     global power, thrust
     # print("Keydn")
-    if power < -150:
+    if power < -350:
         return
     if smooth:
         power -= 1
@@ -1172,6 +1433,7 @@ contnz = 0
 plog = []
 tcnter1 = 0
 
+
 def submit_loc(czugat=None):
     global zugat, accuer
     cszugat = czugat
@@ -1192,15 +1454,18 @@ def submit_loc(czugat=None):
 lastupdate_t = time.time()
 
 def physics():
-    global lastupdate_t, lastspdlim, tcnter1, plog, contnz, caccel, limitz, accuer, curspeed, thrust, gtcsinfo, accreq, power, acreqspd, LEVEL, schutz, schutz_info, sysinfo, zusatz_lastspdlim, passing, PASSING_SPD
+    global lastupdate_t, current_slope, tcnter1, intervene_spd, plog, contnz, caccel, limitz, accuer, curspeed, thrust, gtcsinfo, accreq, power, acreqspd, LEVEL, schutz, schutz_info, sysinfo, zusatz_lastspdlim, passing, PASSING_SPD, MONITOR_SPEED_DELTA, MONITOR_ACCEL, announced_sig, announcement_got, dendro_mass, dendro_feed
     if power < 0 or curspeed < 20:
         thrust = power / 2
     else:
         thrust = power / (curspeed / 10)
-    thrust -= 10
+    thrust *= car_stat(cpsrc)
+    # Might be dynamic values in the future
+    thrust -= max(0, 10 + (current_slope / 5) - geo_elem * car_stat("g") * 0.7)
     accuer += (curspeed / 3.6) * (time.time() - lastupdate_t)
-    caccel = thrust / 50
-    curspeed += thrust / 50 * ((time.time() - lastupdate_t) / 0.2)
+    cweight = car_stat("weight")
+    caccel = thrust / cweight
+    curspeed += thrust / cweight * ((time.time() - lastupdate_t) / 0.2)
     lastupdate_t = time.time()
     if (thrust > 0) and light[1]:
         tcnter1 += 1
@@ -1231,11 +1496,7 @@ def physics():
         cspdlim = spdlim
         # light[3] = False
         cacreqspd = acreqspd
-        if curspeed > spdlim:
-            if accreq < -1.5:
-                gtcsinfo.append(["Deflect now", "orange"])
-                start_sound("deflect")
-            light[2] = True
+        
         if ((LEVEL >= 2) and curspeed > (cacreqspd + 3)) and (accreq < -2):
             contnz += 0.5
         if (LEVEL <= 1) and (contnz > 12):
@@ -1243,7 +1504,7 @@ def physics():
         if (contnz > 50) or (accreq < -8):
             light[3] = True
             plog.append(time.ctime() + " GTCS: vcac = " + str(round(cacreqspd, 2)) + ", cntz = " + str(contnz))
-        ccspdlim = min(spdlim, lastspdlim, zusatz_lastspdlim)
+        ccspdlim = min(spdlim, cspdlim, lastspdlim, zusatz_lastspdlim)
         if (LEVEL <= 1) and (curspeed > ccspdlim):
             if (curspeed - ccspdlim > 80):
                 accreq = -12
@@ -1254,7 +1515,25 @@ def physics():
             elif curspeed > ccspdlim:
                 accreq = -4
                 contnz += 0.25
-        if (curspeed < lastspdlim) and (curspeed < spdlim):
+        if LEVEL <= 1:
+            # Evaluate for announcement signals
+            if announced_sig != "?":
+                cvziel = translate(announced_sig)
+                intervened = False
+                for i in range(len(ANNOUNCEMENT_AT)):
+                    if not announcement_got[i]:
+                        continue
+                    #print("Monitor attempt ",str(cvziel + MONITOR_SPEED_DELTA[i]),"for",str(-MONITOR_ACCEL[i]))
+                    cmonspd = cvziel + MONITOR_SPEED_DELTA[i]
+                    if curspeed > cmonspd:
+                        accreq = min(accreq, -MONITOR_ACCEL[i])
+                        intervene_spd = cmonspd
+                        intervened = True
+                if not intervened:
+                    intervene_spd = USERLIM
+        else:
+            intervene_spd = USERLIM
+        if (curspeed < ccspdlim) or (accreq >= 0):
             accreq = 0
             contnz = 0
             light[2] = False
@@ -1265,8 +1544,23 @@ def physics():
             acreqspd = curspeed + accreq * (2 * 3.6)
             if acreqspd < 0:
                 acreqspd = 0
-            if acreqspd < min(lastspdlim, spdlim):
+            #print("Raw evaluation #1:",acreqspd)
+            if acreqspd > min(lastspdlim, spdlim):
                 acreqspd = min(lastspdlim, spdlim)
+            #print("Raw evaluation #2",acreqspd)
+        #print("Result accreq=",accreq,"acreqspd=",acreqspd)
+        if curspeed > min(spdlim, intervene_spd):
+            # if len(limitz) >= 10:
+            # cacreqspd = max(acreqspd,limitz[0] + 5)
+            #    if len(limitz) > 10:
+            #        limitz = limitz[1:]
+            # if cacreqspd < 120:
+            #    gtcsinfo.append(["GTCS-"+str(LEVEL)+" deflection " + str(int(cacreqspd)) + " km/h","orange"])
+            # gtcsinfo.append(["Acceleration " + str(round(accreq,2)),"orange"])
+            if accreq < -1.5:
+                gtcsinfo.append(["Deflect now", "orange"])
+                start_sound("deflect")
+            light[2] = True
         if schutz:
             light[3] = True
             gtcsinfo.append([schutz_info, "red"])
@@ -1286,7 +1580,13 @@ def physics():
                 start_sound("zb")
     if light[6]:
         gtcsinfo.append(["Magnet-brake", "blue"])
-
+    dendro_mass += dendro_feed / 300
+    if cpsrc == "d":
+        dendro_mass -= thrust / 400
+    if dendro_mass < 0:
+        dendro_mass = 0
+    elif dendro_mass > 5000:
+        dendro_mass = 5000
     turtle.ontimer(physics, 200)
 
 
@@ -1366,7 +1666,7 @@ def locupd():
 
 
 def schutz_cancel():
-    global schutz, on_keyboard, ps_queue, failures, was_failure
+    global schutz, on_keyboard, ps_queue, failures, was_failure, cars
     if on_keyboard:
         keyboard_add('5')
         return
@@ -1374,6 +1674,9 @@ def schutz_cancel():
     light[3] = False
     for i in failures:
         was_failure[i] = (failures[i][1] or failures[i][2]())
+    for i in cars:
+        for j in i["failures"]["term"]:
+            i["failures"]["was_failure"][j] = (j[1] or j[2](i))
     ps_queue.clear()
 
 
@@ -1407,6 +1710,7 @@ def change_loc():
     on_keyboard = True
     befshow()
 
+
 def change_spd_nxstep():
     global USERLIM, on_keyboard
     bns = ""
@@ -1428,6 +1732,7 @@ def change_spd():
     on_keyboard = True
     next_keyboard = lambda: change_spd_nxstep()
     befshow()
+
 
 def paxcaller():
     global passenger_call, on_keyboard
@@ -1510,6 +1815,8 @@ def swtc_pwr():
         return
     if cpsrc == "a":
         cpsrc = "e"
+    elif cpsrc == "e":
+        cpsrc = "d"
     else:
         cpsrc = "a"
 
@@ -1553,8 +1860,67 @@ def chg_switch():
         return
     if ovrd_page == 'a':
         ovrd_page = 'e'
+    elif ovrd_page == 'e':
+        ovrd_page = 'z'
     else:
         ovrd_page = 'a'
+
+def geo_charge():
+    global on_keyboard, geo_elem
+    if on_keyboard:
+        keyboard_add('u')
+        return
+    if geo_elem < 10.0:
+        geo_elem += random.randint(1, 4) / 10
+
+def geo_release():
+    global on_keyboard, geo_elem
+    if on_keyboard:
+        keyboard_add('i')
+        return
+    geo_elem -= random.randint(2, 6) / 10
+    if geo_elem < 0:
+        geo_elem = 0
+
+        
+def dendro_charge():
+    global on_keyboard, dendro_feed
+    if on_keyboard:
+        keyboard_add('O')
+        return
+    dendro_feed += random.randint(2, 8) / 10
+
+def dendro_release():
+    global on_keyboard, dendro_feed
+    if on_keyboard:
+        keyboard_add('P')
+        return
+    dendro_feed -= random.randint(6, 10) / 10
+    if dendro_feed < 0:
+        dendro_feed = 0
+
+def pyro_charge():
+    global apress, on_keyboard, pyro_temp
+    if on_keyboard:
+        keyboard_add('o')
+        return
+    pyro_temp += random.randint(50, 150) / 10
+
+def pyro_release():
+    global apress, on_keyboard, pyro_temp
+    if on_keyboard:
+        keyboard_add('p')
+        return
+    pyro_temp -= random.randint(50, 150) / 10
+    if pyro_temp < 0:
+        pyro_temp = 0
+
+def system_upgrade():
+    global on_keyboard
+    if on_keyboard:
+        keyboard_add('v')
+        return
+    gtcs3_init()
 
 t.screen.onkey(wind_charge, 'o')
 t.screen.onkey(wind_release, 'p')
@@ -1565,7 +1931,13 @@ t.screen.onkey(panto_swtc, 's')
 t.screen.onkey(change_afb, 'g')
 t.screen.onkey(show_switch, 'm')
 t.screen.onkey(chg_switch, 'n')
-
+t.screen.onkey(geo_charge, 'u')
+t.screen.onkey(geo_release, 'i')
+t.screen.onkey(dendro_charge, 'O')
+t.screen.onkey(dendro_release, 'P')
+t.screen.onkey(pyro_charge, 'K')
+t.screen.onkey(pyro_release, 'L')
+t.screen.onkey(system_upgrade, 'v')
 t.screen.onkey(name_disp, '0')
 
 
@@ -1580,10 +1952,11 @@ def syspage_switch(ckey):
 for i in syspages:
     t.screen.onkey(eval("lambda: syspage_switch('{}')".format(i)), i)
 
-for i in '12tyuidfjxcvbQWERTYUIOPASDFGHJKLZXCVBNM':
+for i in '12dfjxcbQWERTYUIASDFGHJZXCVBNM':
     t.screen.onkey(eval("lambda: keyboard_add('{}')".format(i)), i)
 
-t.screen.onkey(lambda: keyboard_add('_'), ',')
+if not SPECIAL_KEY:
+    t.screen.onkey(lambda: keyboard_add('_'), ',')
 
 
 def discard_keyboard():
@@ -1599,8 +1972,9 @@ def proceed_keyboard():
     next_keyboard()
 
 
-t.screen.onkey(discard_keyboard, '.')
-t.screen.onkey(proceed_keyboard, '/')
+if not SPECIAL_KEY:
+    t.screen.onkey(discard_keyboard, '.')
+    t.screen.onkey(proceed_keyboard, '/')
 
 t.screen.listen()
 
@@ -1626,10 +2000,21 @@ autog3 = True
 ospeed = spdlim
 geschw = 120
 
+def lkjcall(zugat):
+    global LCTR, curlkj, prereded
+    u = urlopen(LCTR + "?sid=" + zugat)
+    su = u.read().decode('utf-8')
+    u.close()
+    curlkj = su
+    if lastspdlim <= 0:
+        curlkj = "00"
+        prereded = True
+
 
 def update_loc(target):
-    global geschw, curlkj, prereded, accuer, lastspdlim, g3err, LEVEL, zugat, spdlim, accreq, ZUGNAME, autog3, ospeed, AUTH, passing, PASSING_SPD
+    global geschw, curlkj, prereded, accuer, lastspdlim, g3err, LEVEL, zugat, spdlim, accreq, ZUGNAME, autog3, ospeed, AUTH, passing, PASSING_SPD, ANNOUNCEMENT_AT, announcement_got
     try:
+        announcement_got = [False] * len(ANNOUNCEMENT_AT)
         submit_loc(target)
         if zugat != "":
             u = urlopen(ZCTR + "?sid=" + zugat + "&type=1&name=" + ZUGNAME + "&auth=" + AUTH)
@@ -1670,10 +2055,7 @@ def update_loc(target):
         if autog3:
             gtcs3_init()
             autog3 = False
-        u = urlopen(LCTR + "?sid=" + zugat)
-        su = u.read().decode('utf-8')
-        u.close()
-        curlkj = su
+        lkjcall(zugat)
         u = urlopen(ZCTR + "?sid=" + target + "&type=0&name=" + ZUGNAME + "&auth=" + AUTH)
         u.read()
         u.close()
@@ -1695,7 +2077,7 @@ def schutz_broadcast(info):
 
 
 def console():
-    global SCHUTZ_PROB, SCHUTZ_SIMU, SCTR, ZCTR, DCTR, BCTR, LCTR, ICTR, TCTR, GLOGGING, PLOGGING, plog, ZUGNAME, spdlim, zugat, gtcsinfo, accreq, acreqspd, thrust, power, accuer, LEVEL, g3err, autog3, failures, passenger_call
+    global SCHUTZ_PROB, SCHUTZ_SIMU, SCTR, ZCTR, DCTR, BCTR, LCTR, ICTR, TCTR, GLOGGING, PLOGGING, plog, ZUGNAME, spdlim, zugat, gtcsinfo, accreq, acreqspd, thrust, current_slope, power, accuer, LEVEL, g3err, autog3, failures, passenger_call, cars
     while True:
         ip = input(">>> ")
         cmd = ip.split(" ")
@@ -1737,6 +2119,8 @@ def console():
                 print(maxthr_val())
             elif cmd[1] == "6n":
                 print(power)
+            elif cmd[1] == "7":
+                print(current_slope)
             elif cmd[1] == "s":
                 print(min(lastspdlim, zusatz_lastspdlim))
         elif cmd[0] == "glog":
@@ -1800,16 +2184,45 @@ def console():
                 else:
                     schutz_broadcast(cmd[1])
         elif cmd[0] == "failmgmt":
-            if len(cmd) < 2:
-                for i in failures:
-                    failures[i][1] = False
-                print("All failures cleared")
-            else:
-                try:
+            try:
+                if len(cmd) < 2:
+                    for i in failures:
+                        failures[i][1] = False
+                    print("All failures cleared")
+                elif cmd[1] == "car":
+                    if len(cmd) < 3:
+                        for i in cars:
+                            for jt in i["failures"]["term"]:
+                                j = i["failures"]["term"][jt]
+                                if j[1]:
+                                    j[1] = False
+                                    j[5](i)
+                        print("All failures cleared")
+                    else:
+                        pass
+                else:
                     failures[cmd[1]][1] = not failures[cmd[1]][1]
                     print("Failure item '{}' is configured to".format(failures[cmd[1]][0]), failures[cmd[1]][1])
-                except Exception as e:
-                    print("Unable to configure", e)
+            except Exception as e:
+                print("Unable to configure", e)
+        elif cmd[0] == "connect":
+            if len(cmd) < 2:
+                print("Invalid connect commmand")
+                continue
+            conn = copy.deepcopy(eval(" ".join(cmd[1:])))
+            if type(conn) is list:
+                cars += conn
+            else:
+                cars.append(conn)
+            schutz_broadcast("Zugbind")
+        elif cmd[0] == "disconnect":
+            if len(cmd) < 2:
+                print("Invalid disconnect commmand")
+                continue
+            sz = int(cmd[1])
+            if sz > 0:
+                cars = cars[:sz]
+            schutz_broadcast("Zugtrennwarnung")
         else:
             print("Invalid command")
 
@@ -1838,7 +2251,7 @@ former_signal = "?"
 dif_warning = 0
 
 def gtcs3():
-    global lbdisp, passdz, geschw, lastseg, furseg, extcmd, LCTR, curlkj, lastspdlim, g3err, accuer, curspeed, caccel, nextdist, spdlim, accreq, acreqspd, zugat, ospeed, zusatz_lastspdlim, zusatz_spdlim, zusatz_spdlim_at, appdz, asuber, dif_warning, former_sid, former_signal
+    global lbdisp, passdz, current_slope, geschw, lastseg, furseg, extcmd, LCTR, curlkj, lastspdlim, g3err, accuer, curspeed, caccel, nextdist, spdlim, accreq, acreqspd, zugat, ospeed, zusatz_lastspdlim, zusatz_spdlim, zusatz_spdlim_at, appdz, asuber, dif_warning, former_sid, former_signal, ANNOUNCEMENT_AT, announcement_got, announced_name, announced_sig
     while True:
         # Load actual special command
         zusatz_spdlim = 350
@@ -1848,6 +2261,7 @@ def gtcs3():
         last_cancel = -100000
         pass_p0 = -100000
         pass_p1 = -99999
+        lkj_to_call = False
         try:
             # Resolve actual information:
             if (zugat != "") and (zugat != "?"):
@@ -1860,11 +2274,25 @@ def gtcs3():
                     remdis = int(extcmd[0])
                     sname = "?"
                     esc = extcmd[1:]
+                    c_current_slope = 0
                     for i in esc:
                         csp = i.split(" ")
                         dis = int(csp[0])
                         if csp[1] == "S" and sname == "?":
                             sname = csp[2]
+                            # Closest signal
+                            if LEVEL <= 2:
+                                for i in range(len(ANNOUNCEMENT_AT)):
+                                    if (dis < ANNOUNCEMENT_AT[i]) and (not announcement_got[i]):
+                                        announcement_got[i] = True
+                                        if (sname != announced_name) or (csp[3] != announced_sig):
+                                            # This is not working, but I don't know why.
+                                            dif_warning = 3
+                                        announced_name = sname
+                                        # Directly copy signal text
+                                        announced_sig = csp[3]
+                                        lkj_to_call = True
+                                        
                         elif csp[1] == "Le":
                             if dis < 0:
                                 last_cancel = max(last_cancel, dis)
@@ -1882,6 +2310,25 @@ def gtcs3():
                             if dis < 0:
                                 pass_p1 = max(pass_p1, dis)
                                 appdz = False
+                        elif csp[1] == "M":
+                            if dis < 0:
+                                max_level = int(csp[2])
+                                if max_level < LEVEL:
+                                    gtcs3_exit(max_level)
+                        elif csp[1] == "O":
+                            if dis < 0:
+                                c_current_slope = int(csp[2])
+                        elif csp[1] == "Elem":
+                            if dis < 0:
+                                if csp[2] == "A":
+                                    anemo_bg = int(csp[3])
+                                elif csp[2] == "Ev":
+                                    electro_vbg = int(csp[3])
+                                elif csp[2] == "Ea":
+                                    electro_abg = int(csp[3])
+                                elif csp[2] == "G":
+                                    geo_bg = int(csp[3])
+                    current_slope = c_current_slope
                     passdz = (pass_p0 >= pass_p1)
                     for i in esc:
                         csp = i.split(" ")
@@ -1910,7 +2357,12 @@ def gtcs3():
             g3err.append(time.ctime() + " GTCS-3: [To gtcs-2]" + str(e))
             gtcs3_exit(2)
             extcmd = []
-
+        try:
+            if lkj_to_call:
+                lkjcall(zugat)
+        except Exception as e:
+            g3err.append(time.ctime() + " GTCS-3: [To gtcs-2]" + str(e))
+            gtcs3_exit(2)
         # Tackle with:
         # 1. Neutral area
         # 2. Speed limits
@@ -1992,13 +2444,7 @@ def gtcs3():
                         accuer = 1
                         update_loc(sr[3])
                 try:
-                    u = urlopen(LCTR + "?sid=" + zugat)
-                    su = u.read().decode('utf-8')
-                    u.close()
-                    curlkj = su
-                    if lastspdlim <= 0:
-                        curlkj = "00"
-                        prereded = True
+                    lkjcall(zugat)
                 except Exception as e:
                     g3err.append(time.ctime() + " LKJ:" + str(e))
                     curlkj = "?"
@@ -2011,7 +2457,7 @@ def gtcs3():
 
 
 def logclr():
-    global GLOGGING, PLOGGING, g3err, plog, SCHUTZ_SIMU, SCHUTZ_PROB, failures, curspeed
+    global GLOGGING, PLOGGING, g3err, plog, SCHUTZ_SIMU, SCHUTZ_PROB, failures, curspeed, cpsrc
 
     SCHUTZ_AFFAIR = ["Hilichurlwarnung", "Slimenwarnung", "Eisenbahnfaulwarnung", "Unerwartetelementwarnung",
                      "Abyssmagewarnung"]
@@ -2030,7 +2476,8 @@ def logclr():
                         rw = random.choice(["ovldr", "scond", "eblock"])
                         failures[rw][1] = True
         if ((curspeed > 15) and (maxthr_val() < 10)) or (failures["thr"][1]):
-            start_sound("thrust")
+            if cpsrc != "d":
+                start_sound("thrust")
         for i in ["epwrlo", "epwrhi"]:
             if failures[i][2]():
                 start_sound("volts")
@@ -2066,19 +2513,38 @@ def befread():
 
 
 def gsmgmt():
-    global failures, power, SCHUTZ_PROB, apress, evolts, eamps, cevolts, ceamps, efreq, sysinfo, syspages, csyspage, cpsrc, passdz, curspeed, caccel, thrust, spdlim, lastspdlim, zusatz_lastspdlim, curlkj, zugat, light, dif_warning, batvolts, batamps, batregen, servolts, onbat, battery_charge
-    s = open("blackbox_high_speed.csv","a")
+    global failures, power, SCHUTZ_PROB, apress, evolts, eamps, cevolts, ceamps, efreq, sysinfo, syspages, csyspage, cpsrc, passdz, curspeed, caccel, thrust, spdlim, lastspdlim, zusatz_lastspdlim, curlkj, zugat, light, dif_warning, batvolts, batamps, batregen, servolts, onbat, battery_charge, geo_elem, cars, dendro_mass, pyro_temp
+    s = open("blackbox_high_speed.csv", "a")
     ticker = 0
     while True:
         if random.randint(0, 350000) < SCHUTZ_PROB:
-            rf = random.choice(list(failures))
-            failures[rf][1] = not failures[rf][1]
-            if failures[rf][1] and (("fire" in rf) or ("smoke" in rf)):
-                passenger_call = "klee_trouble"
-            if failures[rf][1] and (rf in sch_failure):
-                schutz_broadcast("Störung")
-            for i in was_failure:
-                was_failure[i] = False
+            if random.randint(0, 35000) < SCHUTZ_PROB:
+                rf = random.choice(list(failures))
+                failures[rf][1] = not failures[rf][1]
+                if failures[rf][1] and (rf in sch_failure):
+                    schutz_broadcast("Störung")
+                for i in was_failure:
+                    was_failure[i] = False
+            else:
+                # Get a carriage
+                carid = random.randint(0, len(cars) - 1)
+                carsel = cars[carid]
+                rf = random.choice(list(carsel["failures"]["term"]))
+                carsel["failures"]["term"][rf][1] = not carsel["failures"]["term"][rf][1]
+                if carsel["failures"]["term"][rf][1]:
+                    try:
+                        carsel["failures"]["term"][rf][4](carsel)
+                    except Exception as e:
+                        print(str(e))
+                    if (rf in carsel["failures"]["sch_failure"]):
+                        schutz_broadcast("Störung")
+                else:
+                    try:
+                        carsel["failures"]["term"][rf][5](carsel)
+                    except Exception as e:
+                        print(str(e))
+                for i in carsel["failures"]["was_failure"]:
+                    carsel["failures"]["was_failure"][i] = False
         # Failure effects
         if failures["thr"][1]:
             if power > 0:
@@ -2123,7 +2589,27 @@ def gsmgmt():
         if failures["depwrhi"][1] or failures["ovldr"][1]:
             if servolts < 64:
                 servolts += random.randint(10, 40) / 10
-        
+        if failures["geofail"][1]:
+            if geo_elem > 0:
+                geo_elem -= random.randint(8, 14) / 10
+        if failures["pyrolo"][1]:
+            if pyro_temp > 300:
+                pyro_temp -= random.randint(30, 50) / 5
+        if failures["pyrohi"][1]:
+            if pyro_temp < 1100:
+                pyro_temp += random.randint(30, 50) / 5
+        if failures["denlo"][1]:
+            if dendro_mass > 1.5:
+                dendro_mass -= random.randint(30, 50) / 50
+        if apress < anemo_bg:
+            apress += random.randint(20, 30) / 10
+        if cevolts < electro_vbg:
+            cevolts += random.randint(40, 50) / 10
+        if ceamps < electro_abg:
+            ceamps += random.randint(40, 50) / 10
+        if geo_elem < geo_bg:
+            geo_elem += random.randint(11, 15) / 10
+
         sysinfo = []
         for i in syspages[csyspage]:
             sysinfo.append([i[0](), i[1]()])
@@ -2155,8 +2641,8 @@ def gsmgmt():
             eamps = 0.01
         batregen = False
         # Evaluate battery volts:
-        if battery_charge < 0.1:
-            battery_charge = 0.1
+        if battery_charge < 0.01:
+            battery_charge = 0.01
         batvolts = math.log(battery_charge*20000/MAX_BAT_CAPACITY, 2.3)*200
         batamps = (batvolts)/50 + (random.randint(-45,45)/100)
         chvolts = 20
@@ -2166,7 +2652,7 @@ def gsmgmt():
             eamps = (abs(power * 720) / resi)**0.5
             chvolts = -eamps * resi
         #print("pre;;chv=",chvolts,"ce:",cevolts,ceamps,"ev=",evolts,"ea=",eamps,onbat,batregen)
-        if cpsrc == "a":
+        if cpsrc in ("a", "d"):
             chvolts = 20
         if (cevolts < chvolts + 10) and (batvolts > 0):
             # Not so physics, I think
@@ -2183,7 +2669,9 @@ def gsmgmt():
             #evolts = cevolts - chvolts
             batamps = eamps
             batregen = True
-            if battery_charge < MAX_BAT_CAPACITY:
+            if (battery_charge < MAX_BAT_CAPACITY):
+                if batvolts < 0:
+                    batvolts = 2.5
                 battery_charge += batamps * (cevolts - chvolts) / batvolts / 4000
             # 3600 with something else
         #print("aft;;chv=",chvolts,"ev=",evolts,"ea=",eamps,onbat,batregen)
@@ -2200,8 +2688,10 @@ def gsmgmt():
         try:
             if (ticker % 10) == 0:
                 s.write(",".join(
-                    [time.ctime(), str(round(curspeed, 2)), str(round(caccel * 5 / 3.6, 3)), str(round(thrust, 2)), str(spdlim),
-                     str(lastspdlim), str(zusatz_lastspdlim), curlkj, zugat, cpsrc, str(apress), str(evolts), str(eamps), ",".join([str(i) for i in light])]))
+                    [time.ctime(), str(round(curspeed, 2)), str(round(caccel / 3.6 * 5, 3)), str(round(thrust, 2)),
+                     str(spdlim),
+                     str(lastspdlim), str(zusatz_lastspdlim), curlkj, zugat, cpsrc, str(apress), str(evolts),
+                     str(eamps), ",".join([str(i) for i in light])]))
                 s.write("\n")
             if ticker > 50:
                 ticker = 0
@@ -2236,47 +2726,52 @@ def afb():
                         minperm = 25
                     elif nextdist <= 1000:
                         minperm = 40
-            if (accreq >= 0) or (LEVEL > 1 and accreq > -0.05) or (((accreq > -1.35) and (curspeed < minperm - 5))):
-                # plog.append(time.ctime() + " AFB Level 1")
-                if (csmin - 10) - (curspeed) > 60:
-                    if abs(acceldata - 1) > 0.05 or abs(thrust - 100) > 5:
-                        if (acceldata < 1) and (thrust < 100):
-                            kup(True)
-                        elif (acceldata > 1.05) or (thrust > 105):
-                            kdn(True)
-                    time.sleep(0.02)
-                elif (curspeed < (csmin - 10)) or (curspeed < minperm - 5):
-                    if ((acceldata < 0.5) and (thrust < 20)):
-                        kup(True)
-                    elif (acceldata > 0.55) or (thrust > 25):
-                        kdn(True)
-                    time.sleep(0.02)
-                elif (curspeed < csmin) and (curspeed > minperm):
-                    if thrust <= -2:
-                        kup(True)
-                    elif thrust >= 2:
-                        kdn(True)
-                    time.sleep(0.02)
-                else:
-                    if thrust > -10:
-                        kdn(True)
-                    elif thrust < -10:
-                        kup(True)
-                    time.sleep(0.05)
-            elif (accreq < -0.1):
-                # plog.append(time.ctime() + " AFB Level 0")
-                if abs(acceldata - accreq) > 0.05:
-                    if accreq < acceldata:
-                        kdn(True)
-                    elif accreq > acceldata + 0.05:
-                        kup(True)
+            if (cpsrc in ("p", "e")) and (evolts > 3000 or eamps > 100):
+                kdn(True)
                 time.sleep(0.02)
             else:
-                # plog.append(time.ctime() + " AFB Level 2")
-                time.sleep(1)
+                if (accreq >= 0) or (LEVEL > 1 and accreq > -0.05) or (((accreq > -1.35) and (curspeed < minperm - 5))):
+                    # plog.append(time.ctime() + " AFB Level 1")
+                    if (csmin - 10) - (curspeed) > 60:
+                        if abs(acceldata - 1) > 0.05 or abs(thrust - 100) > 5:
+                            if (acceldata < 1) and (thrust < 100):
+                                kup(True)
+                            elif (acceldata > 1.05) or (thrust > 105):
+                                kdn(True)
+                        time.sleep(0.02)
+                    elif (curspeed < (csmin - 10)) or (curspeed < minperm - 5):
+                        if ((acceldata < 0.5) and (thrust < 20)):
+                            kup(True)
+                        elif (acceldata > 0.55) or (thrust > 25):
+                            kdn(True)
+                        time.sleep(0.02)
+                    elif (curspeed < csmin) and (curspeed > minperm):
+                        if thrust <= -2:
+                            kup(True)
+                        elif thrust >= 2:
+                            kdn(True)
+                        time.sleep(0.02)
+                    else:
+                        if thrust > -10:
+                            kdn(True)
+                        elif thrust < -10:
+                            kup(True)
+                        time.sleep(0.05)
+                elif (accreq < -0.1):
+                    # plog.append(time.ctime() + " AFB Level 0")
+                    if abs(acceldata - accreq) > 0.05:
+                        if accreq < acceldata:
+                            kdn(True)
+                        elif accreq > acceldata + 0.05:
+                            kup(True)
+                    time.sleep(0.02)
+                else:
+                    # plog.append(time.ctime() + " AFB Level 2")
+                    time.sleep(1)
         else:
             # plog.append(time.ctime() + " AFB not enabled")
             time.sleep(1)
+
 
 def render_3d():
     global extcmd, RENDER, accuer, asuber, dif_warning
@@ -2293,6 +2788,7 @@ def render_3d():
         if dif_warning > 0:
             dif_warning -= 1
         time.sleep(0.2)
+
 
 # turtle.right(90)
 render_gtcs()
